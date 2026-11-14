@@ -7,7 +7,7 @@ struct ToolArgumentsView: View {
 
     var body: some View {
         Group {
-            if showsDiff, let change = ToolChange(arguments: arguments), !change.lines.isEmpty {
+            if showsDiff, let change = ToolChange(arguments: arguments) {
                 ToolDiffView(change: change)
             } else {
                 if let title { Text(title).font(.body).textSelection(.enabled) }
@@ -32,20 +32,31 @@ private struct ToolChange {
     }
 
     let title: String
-    let lines: [Line]
+    let hunks: [[Line]]
 
     init?(arguments: String) {
-        guard let input = try? JSONDecoder().decode([String: String].self, from: Data(arguments.utf8)),
-              let path = input["path"] else { return nil }
-        if input.count == 3, let old = input["old"], let new = input["new"] {
-            title = "Edit \(path)"
-            lines = Self.diff(old: Self.splitLines(old), new: Self.splitLines(new))
-        } else if input.count == 2, let content = input["content"] {
+        guard var input = try? JSONSerialization.jsonObject(with: Data(arguments.utf8)) as? [String: Any],
+              let path = input.removeValue(forKey: "path") as? String else { return nil }
+        if input.count == 1, let content = input["content"] as? String {
             title = "Write \(path)"
-            lines = Self.splitLines(content).map(Line.added)
+            hunks = [Self.splitLines(content).map(Line.added)]
+        } else if input.count == 1, let edits = input["edits"] as? [[String: String]], !edits.isEmpty {
+            let changes = edits.compactMap(Self.replacementLines)
+            guard changes.count == edits.count else { return nil }
+            title = "Edit \(path)"
+            hunks = changes
+        } else if let edit = input as? [String: String], let lines = Self.replacementLines(edit) {
+            title = "Edit \(path)"
+            hunks = [lines]
         } else {
             return nil
         }
+        guard hunks.allSatisfy({ !$0.isEmpty }) else { return nil }
+    }
+
+    private static func replacementLines(_ input: [String: String]) -> [Line]? {
+        guard input.count == 2, let old = input["old"], let new = input["new"] else { return nil }
+        return diff(old: splitLines(old), new: splitLines(new))
     }
 
     private static func splitLines(_ text: String) -> [String] {
@@ -96,21 +107,27 @@ private struct ToolDiffView: View {
             Text(change.title)
                 .foregroundStyle(palette.foreground)
                 .textSelection(.enabled)
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(change.lines.indices, id: \.self) { index in
-                    let line = change.lines[index]
-                    let colors = colors(for: line)
-                    Text(line.text)
-                        .foregroundStyle(colors.foreground)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(colors.background)
-                        .textSelection(.enabled)
-                }
+            ForEach(change.hunks.indices, id: \.self) { index in
+                hunk(change.hunks[index])
             }
-            .clipShape(.rect(cornerRadius: 5))
         }
+    }
+
+    private func hunk(_ lines: [ToolChange.Line]) -> some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(lines.indices, id: \.self) { index in
+                let line = lines[index]
+                let colors = colors(for: line)
+                Text(line.text)
+                    .foregroundStyle(colors.foreground)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(colors.background)
+                    .textSelection(.enabled)
+            }
+        }
+        .clipShape(.rect(cornerRadius: 5))
     }
 
     private func colors(for line: ToolChange.Line) -> (foreground: Color, background: Color) {

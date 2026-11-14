@@ -5,9 +5,6 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            Tab("General", systemImage: "gearshape") {
-                Color.clear
-            }
             Tab("Themes", systemImage: "paintpalette") {
                 ThemePicker(selection: $theme)
             }
