@@ -63,14 +63,3 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" "synth-desktop-${GITHUB_REF_NAME#v}-macos-arm64.zip" \
             --verify-tag --title "Synth Desktop $GITHUB_REF_NAME" --generate-notes
-
-  homebrew:
-    name: Notify Homebrew tap
-    needs: release
-    if: github.repository == 'synth-sh/desktop' && vars.HOMEBREW_APP_CLIENT_ID != ''
-    permissions: {}
-    uses: synth-sh/homebrew-tap/.github/workflows/notify-release.yml@main
-    with:
-      client-id: ${{ vars.HOMEBREW_APP_CLIENT_ID }}
-    secrets:
-      private-key: ${{ secrets.HOMEBREW_APP_PRIVATE_KEY }}

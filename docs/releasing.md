@@ -14,6 +14,6 @@ example, use `v0.1.0` for marketing version `0.1.0`.
 
 The release workflow builds and tests the app with the pinned engine, signs
 both executables, notarizes the app, and attaches the ZIP to the GitHub
-release. The [Synth tap](https://github.com/synth-sh/homebrew-tap) checks for
-the release and opens a cask update PR. To update it immediately after
-publication, run **Sync stable releases** in the tap's Actions tab.
+release. After it publishes, open
+[Actions → Sync stable releases](https://github.com/synth-sh/homebrew-tap/actions/workflows/sync.yml)
+in the tap and click **Run workflow** to propose the cask update PR.
