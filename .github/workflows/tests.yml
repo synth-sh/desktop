@@ -1,0 +1,39 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Install build tools
+        run: |
+          command -v xcodegen >/dev/null || brew install xcodegen
+          command -v swiftlint >/dev/null || brew install swiftlint
+
+      - name: Lint Swift
+        run: swiftlint lint --strict
+
+      - name: Build app
+        run: Scripts/build-app.sh
+
+      - name: Test with the bundled engine
+        run: python3 Tests/Fixtures/fake_provider.py DerivedData/Build/Products/Release/Synth.app/Contents/Helpers/synth
