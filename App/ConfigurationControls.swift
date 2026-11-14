@@ -42,6 +42,7 @@ struct ModeControl: View {
 }
 
 struct ConfigurationControls: View {
+    @Environment(\.synthPalette) private var palette
     let model: ConversationModel
     @State private var showModels = false
     @State private var modelListHeight: CGFloat = 300
@@ -79,9 +80,9 @@ struct ConfigurationControls: View {
                 ProgressView("Finding models…").controlSize(.small)
             }
             if let error = model.modelError {
-                Text(error).foregroundStyle(SynthPalette.danger).textSelection(.enabled)
+                Text(error).foregroundStyle(palette.danger).textSelection(.enabled)
             } else if !model.loadingModels, model.state?.models?.offered.isEmpty != false {
-                Text("No models available. Check the provider and refresh.").foregroundStyle(SynthPalette.muted)
+                Text("No models available. Check the provider and refresh.").foregroundStyle(palette.muted)
             }
             if let offeredModels = model.state?.models?.offered, !offeredModels.isEmpty {
                 ScrollView {
@@ -93,7 +94,7 @@ struct ConfigurationControls: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(offered.name)
-                                    Text(offered.provider).font(.caption).foregroundStyle(SynthPalette.muted)
+                                    Text(offered.provider).font(.caption).foregroundStyle(palette.muted)
                                 }
                             }
                         }
@@ -115,6 +116,7 @@ struct ConfigurationControls: View {
 }
 
 private struct ReasoningEffortControl: View {
+    @Environment(\.synthPalette) private var palette
     let efforts: [String]
     let effort: String
     let select: (String) async -> Void
@@ -130,7 +132,7 @@ private struct ReasoningEffortControl: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             LabeledContent("Reasoning effort", value: efforts[index].capitalized)
-                .foregroundStyle(SynthPalette.foreground)
+                .foregroundStyle(palette.foreground)
             if efforts.count > 1 {
                 Slider(value: position, in: 0...Double(efforts.count - 1), step: 1) { active in
                     editing = active

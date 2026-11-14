@@ -45,6 +45,10 @@ The sidebar shows when a background conversation is running or needs input.
 Select **More Conversations** to load older chats. Press **Command–Return**
 to send or steer, or click **Stop** to cancel the current turn.
 
+Choose **Synth > Settings > Themes** (⌘,) to browse the bundled themes.
+Selecting a theme updates the conversation window immediately and saves your
+choice for the next launch.
+
 ## Development
 
 ```sh
