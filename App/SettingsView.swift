@@ -1,15 +1,82 @@
 import SwiftUI
+import UserNotifications
 
 struct SettingsView: View {
     @Binding var theme: String
+    let notifications: ConversationNotifications
 
     var body: some View {
         TabView {
             Tab("Themes", systemImage: "paintpalette") {
                 ThemePicker(selection: $theme)
             }
+            Tab("Notifications", systemImage: "bell") {
+                NotificationSettings(notifications: notifications)
+            }
         }
         .frame(width: 536, height: 340)
+    }
+}
+
+private struct NotificationSettings: View {
+    let notifications: ConversationNotifications
+    @AppStorage(NotificationPreference.toasts) private var toasts = true
+    @AppStorage(NotificationPreference.system) private var system = true
+    @AppStorage(NotificationPreference.input) private var input = true
+    @AppStorage(NotificationPreference.outcomes) private var outcomes = true
+    @AppStorage(NotificationPreference.sound) private var sound = NotificationSound.both
+
+    var body: some View {
+        Form {
+            Section("Delivery") {
+                Toggle("In-app toasts", isOn: $toasts)
+                Toggle("macOS notifications", isOn: $system)
+                if system {
+                    LabeledContent("macOS permission") {
+                        permission
+                    }
+                }
+                Picker("Play sounds", selection: $sound) {
+                    ForEach(NotificationSound.allCases, id: \.self) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+            }
+            Section {
+                Toggle("Permission requests and questions", isOn: $input)
+                Toggle("Turn outcomes and engine errors", isOn: $outcomes)
+            } header: {
+                Text("Alert Events")
+            } footer: {
+                Text("Sidebar dots mark unseen activity.")
+            }
+        }
+        .formStyle(.grouped)
+        .task { await notifications.refreshSystemStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await notifications.refreshSystemStatus() }
+        }
+    }
+
+    @ViewBuilder
+    private var permission: some View {
+        switch notifications.systemStatus {
+        case .notDetermined:
+            VStack(alignment: .trailing) {
+                Button("Enable macOS Notifications") { Task { await notifications.authorize() } }
+                if let error = notifications.authorizationError {
+                    Text(error).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        case .denied:
+            Text("Denied in System Settings").foregroundStyle(.secondary)
+        case .authorized, .provisional:
+            Text("Allowed").foregroundStyle(.secondary)
+        case nil:
+            ProgressView().controlSize(.small)
+        default:
+            Text("Unavailable").foregroundStyle(.secondary)
+        }
     }
 }
 

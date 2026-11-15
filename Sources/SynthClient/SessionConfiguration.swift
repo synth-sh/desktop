@@ -1,3 +1,4 @@
+import Foundation
 import SynthProtocol
 
 extension SynthClient {
@@ -28,5 +29,12 @@ extension SynthClient {
         try requireConnected()
         let request = ACP.SetConfiguration(sessionID: sessionID, configID: option, value: value, provider: provider)
         _ = try await call("session/set_config_option", request, as: ACP.Empty.self)
+    }
+
+    func acceptModels(_ models: Synth.Models, sessionID: String, generation: UUID, revision: UInt64) {
+        guard generation == self.generation, connectionState == .connected,
+              revision == modelUpdates[sessionID, default: 0] else { return }
+        sessions[sessionID, default: .init()].update(models)
+        changed()
     }
 }

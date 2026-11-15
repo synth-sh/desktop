@@ -3,6 +3,7 @@ import SynthClient
 import SynthProtocol
 
 struct ConversationView: View {
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.synthPalette) private var palette
     @Bindable var model: ConversationModel
     @State private var renameTarget: String?
@@ -17,6 +18,35 @@ struct ConversationView: View {
             ProjectSidebar(model: model)
         } detail: {
             detail
+        }
+        .overlay(alignment: .topTrailing) {
+            if let alert = model.notifications.toast {
+                ConversationToast(alert: alert) {
+                    model.notifications.open(alert.sessionID, folder: alert.folder)
+                }
+                .padding(14)
+            }
+        }
+        .background {
+            ConversationWindowReader { window in
+                model.notifications.window = window
+                let open = openWindow
+                model.notifications.showWindow = { open(id: "conversation") }
+                model.notifications.focusChanged()
+            }
+            .frame(width: 0, height: 0)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            model.notifications.focusChanged()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            model.notifications.focusChanged()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.notifications.focusChanged()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            model.notifications.focusChanged()
         }
         .task { await model.restore() }
     }

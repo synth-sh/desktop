@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import SynthProtocol
 
 extension ConversationModel {
@@ -45,6 +45,33 @@ extension ConversationModel {
         for folder in groups.map(\.folder) where sessionID == nil || folder != project {
             await loadGroup(folder, refresh: true)
         }
+    }
+
+    func chooseProject() {
+        guard canSwitch else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Open"
+        if let window = NSApp.keyWindow {
+            panel.beginSheetModal(for: window) { [weak self] response in
+                guard response == .OK, let directory = panel.url else { return }
+                Task { await self?.openProject(directory) }
+            }
+        } else {
+            panel.begin { [weak self] response in
+                guard response == .OK, let directory = panel.url else { return }
+                Task { await self?.openProject(directory) }
+            }
+        }
+    }
+
+    private func openProject(_ directory: URL) async {
+        guard canSwitch else { return }
+        let folder = directory.resolvingSymlinksInPath().standardizedFileURL
+        register(folder)
+        await open(in: folder)
     }
 
     func register(_ folder: URL) {
@@ -151,7 +178,7 @@ extension ConversationModel {
         historyBySession.removeValue(forKey: identifier)
         drafts.removeValue(forKey: identifier)
         failures.removeValue(forKey: identifier)
-        completed.remove(identifier)
+        notifications.acknowledge(identifier)
         clearSelection()
         await refresh(from: client)
         await loadGroup(folder, refresh: true)
