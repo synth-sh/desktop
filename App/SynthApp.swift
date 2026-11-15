@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
 @main
 struct SynthApp: App {
@@ -33,7 +34,7 @@ struct SynthApp: App {
             }
         }
         Settings {
-            SettingsView(theme: $themeID)
+            SettingsView(theme: $themeID, notifications: delegate.model.notifications)
         }
     }
 }
@@ -42,6 +43,14 @@ struct SynthApp: App {
 final class SynthAppDelegate: NSObject, NSApplicationDelegate {
     let model = ConversationModel()
     private var terminating = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        let notifications = model.notifications
+        UNUserNotificationCenter.current().delegate = notifications
+        notifications.openConversation = { [weak model] identifier, folder in
+            Task { await model?.openFromNotification(identifier, folder: folder) }
+        }
+    }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false

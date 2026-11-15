@@ -6,6 +6,7 @@ import SynthProtocol
 @MainActor
 @Observable
 final class ConversationModel {
+    let notifications = ConversationNotifications()
     private(set) var project: URL?
     private(set) var sessionID: String?
     private(set) var state: SessionState?
@@ -13,7 +14,6 @@ final class ConversationModel {
     var groups = [ConversationGroup(folder: nil)]
     private(set) var pendingSelection: ConversationSelection?
     var activity: [String: SynthClient.Activity] = [:]
-    var completed: Set<String> = []
     var loadingHistory: Set<String> = []
     var openedSessions: [String: OpenedConversation] = [:]
     var historyBySession: [String: [Synth.Message]] = [:]
@@ -31,6 +31,7 @@ final class ConversationModel {
     private var submissions: [String: Int] = [:]
     private var stopping: Set<String> = []
     var client: SynthClient?
+    private var observingAttention: Task<Void, Never>?
     private var observing: Task<Void, Never>?
 
     var draft: String {
@@ -62,33 +63,6 @@ final class ConversationModel {
     }
     var canDelete: Bool { canSwitch && connection == .connected && sessionID != nil && !busy }
     var loadingModels: Bool { isFetchingModels || (state?.models?.pending ?? 0) > 0 }
-
-    func chooseProject() {
-        guard canSwitch else { return }
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Open"
-        if let window = NSApp.keyWindow {
-            panel.beginSheetModal(for: window) { [weak self] response in
-                guard response == .OK, let directory = panel.url else { return }
-                Task { await self?.openProject(directory) }
-            }
-        } else {
-            panel.begin { [weak self] response in
-                guard response == .OK, let directory = panel.url else { return }
-                Task { await self?.openProject(directory) }
-            }
-        }
-    }
-
-    private func openProject(_ directory: URL) async {
-        guard canSwitch else { return }
-        let folder = directory.resolvingSymlinksInPath().standardizedFileURL
-        register(folder)
-        await open(in: folder)
-    }
 
     func open(in folder: URL? = nil, stored: ACP.SessionInfo? = nil, identifier: String? = nil) async {
         guard canSwitch else { return }
@@ -140,9 +114,9 @@ final class ConversationModel {
     private func select(_ opened: OpenedConversation) {
         project = opened.folder
         sessionID = opened.id
+        notifications.select(opened.id)
         pendingSelection = nil
         modes = opened.modes
-        completed.remove(opened.id)
         error = failures[opened.id]
         modelError = nil
         modelsRequested = false
@@ -188,7 +162,7 @@ final class ConversationModel {
         } else {
             engine = try await makeClient()
             client = engine
-            observe(engine)
+            await observe(engine)
         }
         if await engine.connectionState != .connected {
             if openedSessions.isEmpty {
@@ -201,7 +175,24 @@ final class ConversationModel {
         return engine
     }
 
-    private func observe(_ client: SynthClient) {
+    private func observe(_ client: SynthClient, attention: AsyncStream<SynthClient.AttentionEvent>? = nil) async {
+        let events: AsyncStream<SynthClient.AttentionEvent>
+        if let attention {
+            events = attention
+        } else {
+            events = await client.attentionEvents()
+        }
+        observingAttention?.cancel()
+        observingAttention = Task { [weak self] in
+            for await event in events {
+                guard let self, self.client === client, !isShuttingDown else { return }
+                let storedGroup = groups.first { $0.sessions.contains { $0.id == event.sessionID } }
+                let storedTitle = storedGroup?.sessions.first { $0.id == event.sessionID }?.title
+                let title = [activity[event.sessionID]?.title, storedTitle].compactMap { $0 }.first { !$0.isEmpty }
+                let folder = openedSessions[event.sessionID]?.folder ?? storedGroup?.folder
+                notifications.receive(event, title: title, folder: folder)
+            }
+        }
         observing = Task { [weak self] in
             for await _ in await client.changes() {
                 guard let self else { return }
@@ -218,9 +209,6 @@ final class ConversationModel {
         connection = snapshot.connection
         state = snapshot.session
         interactions = snapshot.interactions
-        for (key, status) in snapshot.activity where key != identifier {
-            if let old = activity[key], status.finished > old.finished { completed.insert(key) }
-        }
         activity = snapshot.activity
         if let identifier, state?.status?.isBusy != true && submitting == 0 {
             stopping.remove(identifier)
@@ -229,6 +217,7 @@ final class ConversationModel {
 
     func shutdown() async {
         isShuttingDown = true
+        observingAttention?.cancel()
         observing?.cancel()
         await client?.disconnect()
     }
@@ -262,6 +251,7 @@ extension ConversationModel {
             replacement = engine
             await client.disconnect()
             guard !isShuttingDown else { throw SynthClient.Failure.disconnected }
+            let attention = await engine.attentionEvents()
             try await engine.connect()
             let opened: OpenedConversation
             do {
@@ -278,7 +268,7 @@ extension ConversationModel {
             self.client = engine
             select(opened)
             await refresh(from: engine)
-            observe(engine)
+            await observe(engine, attention: attention)
             await loadGroup(folder, refresh: true)
         } catch {
             await replacement?.disconnect()
@@ -289,6 +279,7 @@ extension ConversationModel {
     func clearSelection() {
         project = nil
         sessionID = nil
+        notifications.select(nil)
         pendingSelection = nil
         modes = []
         error = nil

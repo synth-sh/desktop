@@ -12,12 +12,13 @@ public actor SynthClient {
     private var pending: [RequestID: CheckedContinuation<JSONValue, any Error>] = [:]
     private var workingDirectories: [String: String] = [:]
     private var subscribers: [UUID: AsyncStream<Void>.Continuation] = [:]
+    var attentionSubscribers: [UUID: AsyncStream<AttentionEvent>.Continuation] = [:]
     private var diagnosticBytes = Data()
     var modelUpdates: [String: UInt64] = [:]
 
     public private(set) var connectionState: ConnectionState = .disconnected
-    public private(set) var sessions: [String: SessionState] = [:]
-    public private(set) var interactions: [RequestID: Interaction] = [:]
+    public internal(set) var sessions: [String: SessionState] = [:]
+    public internal(set) var interactions: [RequestID: Interaction] = [:]
     public var diagnostics: String {
         String(bytes: diagnosticBytes, encoding: .utf8) ?? "Synth emitted non-UTF-8 diagnostics."
     }
@@ -38,6 +39,7 @@ public actor SynthClient {
         transport?.closeInput()
         for waiter in pending.values { waiter.resume(throwing: Failure.disconnected) }
         for subscriber in subscribers.values { subscriber.finish() }
+        for subscriber in attentionSubscribers.values { subscriber.finish() }
     }
 
     public func changes() -> AsyncStream<Void> {
@@ -55,7 +57,7 @@ public actor SynthClient {
         subscribers.removeValue(forKey: id)
     }
 
-    private func changed() {
+    func changed() {
         for subscriber in subscribers.values { subscriber.yield() }
     }
 
@@ -162,7 +164,7 @@ extension SynthClient {
         workingDirectories.removeValue(forKey: sessionID)
         sessions.removeValue(forKey: sessionID)
         modelUpdates.removeValue(forKey: sessionID)
-        interactions = interactions.filter { $0.value.sessionID != sessionID }
+        removeInteractions(for: sessionID)
         changed()
     }
 
@@ -172,7 +174,7 @@ extension SynthClient {
             return try await call("session/prompt", ACP.Prompt(sessionID: sessionID, text: text), as: ACP.Prompted.self)
         } catch let error as RPCError where error.code == -32603 &&
             ["the session's agent stopped", "no such session"].contains(error.message) {
-            markSessionFailed(sessionID, error: error)
+            markSessionFailed(sessionID, error: error, report: true)
             throw error
         }
     }
@@ -254,7 +256,7 @@ extension SynthClient {
 
     private func resolve(_ id: RequestID, with result: some Encodable) async throws {
         let envelope = try Envelope.reply(id, result: result)
-        interactions.removeValue(forKey: id)
+        removeInteraction(id)
         changed()
         try await write(envelope)
     }
@@ -304,7 +306,7 @@ extension SynthClient {
     private func receiveRequest(_ method: String, id: RequestID, envelope: Envelope) async throws {
         switch method {
         case "session/request_permission":
-            interactions[id] = .permission(id, try envelope.parameters(Interaction.Permission.self))
+            addInteraction(.permission(id, try envelope.parameters(Interaction.Permission.self)))
         case "elicitation/create":
             let question = try envelope.parameters(Interaction.Question.self)
             guard question.mode == "form", question.requestedSchema.type == "object",
@@ -312,7 +314,7 @@ extension SynthClient {
                 try await write(.failure(id, .init(code: -32602, message: "Unsupported elicitation form")))
                 return
             }
-            interactions[id] = .question(id, question)
+            addInteraction(.question(id, question))
         default:
             try await write(.failure(id, .init(code: -32601, message: "Unsupported client method: \(method)")))
             return
@@ -323,7 +325,7 @@ extension SynthClient {
     private func receiveNotification(_ method: String, envelope: Envelope) throws {
         switch method {
         case "$/cancel_request":
-            interactions.removeValue(forKey: try envelope.parameters(ACP.CancelRequest.self).requestId)
+            removeInteraction(try envelope.parameters(ACP.CancelRequest.self).requestId)
         case "_synth/snapshot":
             let event = try envelope.parameters(Synth.Snapshot.self)
             sessions[event.sessionId, default: .init()].replace(with: event)
@@ -335,7 +337,7 @@ extension SynthClient {
             sessions[event.sessionId, default: .init()].append(event.stream)
         case "_synth/status":
             let event = try envelope.parameters(Synth.StatusUpdate.self)
-            sessions[event.sessionId, default: .init()].update(event.status)
+            acceptStatus(event)
         case "_synth/models_updated":
             let event = try envelope.parameters(Synth.ModelsUpdate.self)
             modelUpdates[event.sessionId, default: 0] += 1
@@ -345,24 +347,14 @@ extension SynthClient {
             sessions[event.sessionId, default: .init()].notice(event.text)
         case "_synth/session_stopped":
             let event = try envelope.parameters(ACP.SessionRef.self)
-            markSessionFailed(event.sessionId, error: RPCError(code: -32603, message: "The session's engine stopped."))
+            markSessionFailed(
+                event.sessionId, error: RPCError(code: -32603, message: "The session's engine stopped."),
+                report: true
+            )
             return
         default:
             return
         }
-        changed()
-    }
-
-    func acceptModels(_ models: Synth.Models, sessionID: String, generation: UUID, revision: UInt64) {
-        guard generation == self.generation, connectionState == .connected,
-              revision == modelUpdates[sessionID, default: 0] else { return }
-        sessions[sessionID, default: .init()].update(models)
-        changed()
-    }
-
-    private func markSessionFailed(_ sessionID: String, error: any Error) {
-        sessions[sessionID, default: .init()].disconnect(error.localizedDescription)
-        interactions = interactions.filter { $0.value.sessionID != sessionID }
         changed()
     }
 
@@ -379,15 +371,21 @@ extension SynthClient {
     }
 
     private func finish(_ finalState: ConnectionState, cause: any Error) async {
+        let wasConnected = connectionState == .connected
         let connection = transport
         transport = nil
         connectionState = connection == nil ? finalState : .disconnecting
-        interactions.removeAll()
+        for id in interactions.keys { removeInteraction(id) }
         for waiter in pending.values { waiter.resume(throwing: cause) }
         pending.removeAll()
         let failure: String?
         if case .failed(let message) = finalState { failure = message } else { failure = nil }
-        for id in sessions.keys { sessions[id]?.disconnect(failure) }
+        for (id, session) in sessions {
+            if wasConnected, failure != nil, session.failure == nil, session.status?.isBusy == true {
+                reportAttention(id, .sessionStopped)
+            }
+            sessions[id]?.disconnect(failure)
+        }
         changed()
 
         await connection?.shutDown()

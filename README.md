@@ -49,6 +49,12 @@ Choose **Synth > Settings** (⌘,) to browse the bundled themes.
 Selecting a theme updates the conversation window immediately and saves your
 choice for the next launch.
 
+Open **Synth > Settings > Notifications** to control alerts for input
+requests and turn outcomes, and choose where sounds play. Select
+**Enable macOS Notifications** to get alerts when the conversation window
+is inactive. While you view another chat, alerts appear in the top-right
+of the window. A dot in the sidebar marks a chat with unseen activity.
+
 ## Development
 
 ```sh

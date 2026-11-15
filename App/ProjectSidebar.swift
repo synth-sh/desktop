@@ -103,16 +103,15 @@ struct ProjectSidebar: View {
             HStack {
                 Text(title ?? "Untitled conversation").lineLimit(1)
                 Spacer()
+                if let alert = model.notifications.unseen[row.id] {
+                    AttentionDot(title: alert.title)
+                }
                 if current?.awaitingInput == true {
                     Image(systemName: "exclamationmark.bubble.fill")
                         .foregroundStyle(palette.accent)
                         .accessibilityLabel("Waiting for input")
                 } else if current?.busy == true {
                     ProgressView().controlSize(.mini).accessibilityLabel("Running")
-                } else if model.completed.contains(row.id) {
-                    Image(systemName: "checkmark.circle")
-                        .foregroundStyle(palette.success)
-                        .accessibilityLabel("Completed")
                 } else if current?.failed == true {
                     Image(systemName: "exclamationmark.circle")
                         .foregroundStyle(palette.danger)
