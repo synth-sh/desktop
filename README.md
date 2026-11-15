@@ -33,6 +33,7 @@ setting to another compatible engine. Xcode picks up new Swift files in
 
 The desktop version is set in `project.yml`. Update `Engine.commit`
 separately when adopting changes from the engine.
+See [Releasing Synth Desktop](docs/releasing.md) for distribution.
 
 ## Using the app
 
