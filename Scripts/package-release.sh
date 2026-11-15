@@ -27,6 +27,16 @@ security import "$signing_dir/developer-id.p12" -k "$keychain" \
     -P "$DEVELOPER_ID_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
 security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
 
+# codesign requires the signing keychain on the search list even with --keychain.
+existing_keychains=$(security list-keychains -d user)
+search_keychains=("$keychain")
+while IFS='"' read -r _ existing _; do
+    if [ -n "$existing" ] && [ "$existing" != "$keychain" ]; then
+        search_keychains+=("$existing")
+    fi
+done <<< "$existing_keychains"
+security list-keychains -d user -s "${search_keychains[@]}"
+
 identity=$(security find-identity -v -p codesigning "$keychain" |
     awk '/"Developer ID Application:/ { print $2; exit }')
 if [ -z "$identity" ]; then
