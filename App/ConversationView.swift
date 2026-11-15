@@ -3,6 +3,7 @@ import SynthClient
 import SynthProtocol
 
 struct ConversationView: View {
+    @Environment(\.synthPalette) private var palette
     @Bindable var model: ConversationModel
     @State private var renameTarget: String?
     @State private var deleteTarget: String?
@@ -31,8 +32,8 @@ struct ConversationView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SynthPalette.background)
-        .foregroundStyle(SynthPalette.foreground)
+        .background(palette.background)
+        .foregroundStyle(palette.foreground)
         .navigationTitle(conversationTitle)
         .toolbar(removing: model.sessionID == nil ? nil : .title)
         .toolbar {
@@ -197,14 +198,14 @@ struct ConversationView: View {
         _ text: String, actionTitle: String, action: @escaping @MainActor () async -> Void
     ) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.circle").foregroundStyle(SynthPalette.accent)
+            Image(systemName: "exclamationmark.circle").foregroundStyle(palette.accent)
             Text(text).textSelection(.enabled)
             Spacer()
             Button(actionTitle) { Task { await action() } }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 10)
-        .background(SynthPalette.alternateSurface)
+        .background(palette.alternateSurface)
     }
 
 }
@@ -239,8 +240,12 @@ extension ConversationView {
             }
         }
         .padding(14)
-        .background(SynthPalette.surface, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(SynthPalette.border))
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(composerFocused ? palette.accent : palette.border)
+                .allowsHitTesting(false)
+        }
         .frame(maxWidth: 780)
         .padding(.horizontal, 24)
         .padding(.vertical, 16)
@@ -257,14 +262,14 @@ extension ConversationView {
             .overlay {
                 TextEditor(text: $model.draft)
                     .scrollContentBackground(.hidden)
-                    .foregroundStyle(SynthPalette.foreground)
+                    .foregroundStyle(palette.foreground)
                     .focused($composerFocused)
                     .accessibilityLabel("Message")
             }
             .overlay(alignment: .topLeading) {
                 if model.draft.isEmpty {
                     Text(model.busy ? "Steer the conversation" : "Message Synth")
-                        .foregroundStyle(SynthPalette.muted)
+                        .foregroundStyle(palette.muted)
                         .padding(.top, 4)
                         .padding(.leading, 5)
                         .allowsHitTesting(false)
@@ -279,13 +284,13 @@ extension ConversationView {
             Text(connectionText).lineLimit(1)
         } icon: {
             if model.connection == .connected {
-                Image(systemName: "circle.fill").foregroundStyle(SynthPalette.success)
+                Image(systemName: "circle.fill").foregroundStyle(palette.success)
             } else {
                 Image(systemName: "circle.dashed")
             }
         }
         .font(.caption)
-        .foregroundStyle(SynthPalette.muted)
+        .foregroundStyle(palette.muted)
     }
 
     private var connectionText: String {

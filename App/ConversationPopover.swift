@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ConversationPopoverLabel: View {
+    @Environment(\.synthPalette) private var palette
     let title: String
 
     var body: some View {
@@ -12,11 +13,12 @@ struct ConversationPopoverLabel: View {
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 3)
-        .foregroundStyle(SynthPalette.foreground)
+        .foregroundStyle(palette.foreground)
     }
 }
 
 struct ConversationPopover<Content: View>: View {
+    @Environment(\.synthPalette) private var palette
     var width: CGFloat = 220
     @ViewBuilder let content: Content
 
@@ -26,12 +28,13 @@ struct ConversationPopover<Content: View>: View {
         }
         .padding(14)
         .frame(width: width, alignment: .leading)
-        .background(SynthPalette.surface)
-        .foregroundStyle(SynthPalette.foreground)
+        .background(palette.surface)
+        .foregroundStyle(palette.foreground)
     }
 }
 
 struct ConversationPopoverRowStyle: ButtonStyle {
+    @Environment(\.synthPalette) private var palette
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -43,14 +46,14 @@ struct ConversationPopoverRowStyle: ButtonStyle {
             .foregroundStyle(color(for: configuration.role))
             .modifier(SynthButtonBackground(
                 idle: .clear,
-                hovered: SynthPalette.alternateSurface.opacity(0.65),
-                pressed: SynthPalette.alternateSurface,
+                hovered: palette.alternateSurface.opacity(0.65),
+                pressed: palette.alternateSurface,
                 isPressed: configuration.isPressed
             ))
     }
 
     private func color(for role: ButtonRole?) -> Color {
-        guard isEnabled else { return SynthPalette.muted }
-        return role == .destructive ? SynthPalette.danger : SynthPalette.foreground
+        guard isEnabled else { return palette.muted }
+        return role == .destructive ? palette.danger : palette.foreground
     }
 }

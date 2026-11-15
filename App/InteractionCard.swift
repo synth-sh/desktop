@@ -2,6 +2,7 @@ import SwiftUI
 import SynthProtocol
 
 struct InteractionCard: View {
+    @Environment(\.synthPalette) private var palette
     let interaction: Interaction
     let model: ConversationModel
     @State private var answer = ""
@@ -20,20 +21,22 @@ struct InteractionCard: View {
         .disabled(responding)
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SynthPalette.surface, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(SynthPalette.border))
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(palette.border))
     }
 
     private func permissionBody(_ permission: Interaction.Permission) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Permission required", systemImage: "hand.raised")
                 .font(.headline)
-                .foregroundStyle(SynthPalette.accent)
-            Text(permission.toolCall.title ?? permission.toolCall.toolCallId).textSelection(.enabled)
+                .foregroundStyle(palette.accent)
+            let title = permission.toolCall.title ?? permission.toolCall.toolCallId
             if let input = permission.toolCall.rawInput,
                let data = try? prettyEncoder.encode(input),
                let arguments = String(bytes: data, encoding: .utf8) {
-                Text(arguments).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                ToolArgumentsView(arguments: arguments, showsDiff: permission.toolCall.kind == "edit", title: title)
+            } else {
+                Text(title).textSelection(.enabled)
             }
             ViewThatFits(in: .horizontal) {
                 HStack { permissionButtons(permission.options) }
@@ -47,7 +50,7 @@ struct InteractionCard: View {
             Button(option.name) {
                 respond { await model.decide(interaction.id, option: option.optionId) }
             }
-            .tint(option.kind.hasPrefix("reject_") ? SynthPalette.danger : SynthPalette.accent)
+            .tint(option.kind.hasPrefix("reject_") ? palette.danger : palette.accent)
         }
     }
 

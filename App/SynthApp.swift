@@ -4,13 +4,17 @@ import SwiftUI
 @main
 struct SynthApp: App {
     @NSApplicationDelegateAdaptor(SynthAppDelegate.self) private var delegate
+    @AppStorage("themeID") private var themeID = SynthTheme.defaultTheme.id
+
+    private var theme: SynthTheme { SynthTheme.resolve(themeID) }
 
     var body: some Scene {
         Window("Synth", id: "conversation") {
             ConversationView(model: delegate.model)
                 .frame(minWidth: 640, minHeight: 500)
-                .preferredColorScheme(.dark)
-                .tint(SynthPalette.accent)
+                .environment(\.synthPalette, theme.palette)
+                .preferredColorScheme(theme.colorScheme)
+                .tint(theme.palette.accent)
         }
         .defaultSize(width: 900, height: 720)
         .commands {
@@ -27,6 +31,9 @@ struct SynthApp: App {
                 .keyboardShortcut("o")
                 .disabled(!delegate.model.canSwitch)
             }
+        }
+        Settings {
+            SettingsView(theme: $themeID)
         }
     }
 }

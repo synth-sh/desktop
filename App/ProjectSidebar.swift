@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ProjectSidebar: View {
+    @Environment(\.synthPalette) private var palette
     let model: ConversationModel
     @State private var collapsedProjects: Set<URL> = []
 
@@ -40,15 +41,15 @@ struct ProjectSidebar: View {
                         }
                     }
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(SynthPalette.foreground)
+                    .foregroundStyle(palette.foreground)
                     .textCase(nil)
                 }
             }
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(SynthPalette.surface)
-        .foregroundStyle(SynthPalette.foreground)
+        .background(palette.surface)
+        .foregroundStyle(palette.foreground)
         .navigationSplitViewColumnWidth(min: 200, ideal: 235, max: 340)
     }
 
@@ -56,7 +57,7 @@ struct ProjectSidebar: View {
         Label {
             Text(title)
         } icon: {
-            Image(systemName: symbol).foregroundStyle(SynthPalette.accent)
+            Image(systemName: symbol).foregroundStyle(palette.accent)
         }
     }
 
@@ -85,7 +86,7 @@ struct ProjectSidebar: View {
         if group.loading {
             ProgressView().controlSize(.small)
         } else if let error = group.failure {
-            Text(error).font(.caption).foregroundStyle(SynthPalette.danger)
+            Text(error).font(.caption).foregroundStyle(palette.danger)
             Button("Retry") { Task { await model.loadGroup(group.folder, refresh: true) } }
         } else if group.cursor != nil {
             Button("More Conversations") { Task { await model.loadGroup(group.folder, refresh: false) } }
@@ -104,28 +105,33 @@ struct ProjectSidebar: View {
                 Spacer()
                 if current?.awaitingInput == true {
                     Image(systemName: "exclamationmark.bubble.fill")
-                        .foregroundStyle(SynthPalette.accent)
+                        .foregroundStyle(palette.accent)
                         .accessibilityLabel("Waiting for input")
                 } else if current?.busy == true {
                     ProgressView().controlSize(.mini).accessibilityLabel("Running")
                 } else if model.completed.contains(row.id) {
                     Image(systemName: "checkmark.circle")
-                        .foregroundStyle(SynthPalette.success)
+                        .foregroundStyle(palette.success)
                         .accessibilityLabel("Completed")
                 } else if current?.failed == true {
                     Image(systemName: "exclamationmark.circle")
-                        .foregroundStyle(SynthPalette.danger)
+                        .foregroundStyle(palette.danger)
                         .accessibilityLabel("Disconnected")
                 }
             }
             .padding(.vertical, 7)
             .padding(.horizontal, 9)
             .contentShape(Rectangle())
-            .foregroundStyle(selected ? SynthPalette.accent : SynthPalette.foreground)
+            .foregroundStyle(palette.foreground)
             .background(
-                selected ? SynthPalette.alternateSurface : .clear,
+                selected ? palette.alternateSurface : .clear,
                 in: .rect(cornerRadius: 7)
             )
+            .overlay(alignment: .leading) {
+                if selected {
+                    Capsule().fill(palette.accent).frame(width: 2).padding(.vertical, 5)
+                }
+            }
         }
         .buttonStyle(.plain)
         .disabled(!model.canSwitch)

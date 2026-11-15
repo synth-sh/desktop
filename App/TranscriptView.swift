@@ -102,19 +102,21 @@ struct TranscriptView: View {
 }
 
 struct TranscriptNotices: View {
+    @Environment(\.synthPalette) private var palette
     let notices: [String]
 
     var body: some View {
         ForEach(notices.indices, id: \.self) { index in
             Label(notices[index], systemImage: "info.circle")
                 .font(.callout)
-                .foregroundStyle(SynthPalette.muted)
+                .foregroundStyle(palette.muted)
                 .textSelection(.enabled)
         }
     }
 }
 
 private struct TranscriptRow: View {
+    @Environment(\.synthPalette) private var palette
     let message: Synth.Message
     let sessionID: String
     let model: ConversationModel
@@ -123,17 +125,17 @@ private struct TranscriptRow: View {
         switch message.role {
         case "user":
             VStack(alignment: .leading, spacing: 6) {
-                Text("You").font(.caption.weight(.semibold)).foregroundStyle(SynthPalette.muted)
+                Text("You").font(.caption.weight(.semibold)).foregroundStyle(palette.muted)
                 Text(message.text).textSelection(.enabled)
             }
             .padding(13)
-            .background(SynthPalette.surface, in: RoundedRectangle(cornerRadius: 12))
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
             .frame(maxWidth: 490, alignment: .trailing)
             .frame(maxWidth: .infinity, alignment: .trailing)
         case "assistant":
             assistant
         case "summary":
-            Text(message.text).font(.caption).foregroundStyle(SynthPalette.muted).textSelection(.enabled)
+            Text(message.text).font(.caption).foregroundStyle(palette.muted).textSelection(.enabled)
         default:
             EmptyView()
         }
@@ -177,6 +179,7 @@ private struct CompletedMarkdown: View {
 }
 
 private struct ReasoningText: View {
+    @Environment(\.synthPalette) private var palette
     let text: String
     var load: (@MainActor () async throws -> String)?
 
@@ -186,18 +189,19 @@ private struct ReasoningText: View {
                 .padding(.vertical, 5)
         }
         .font(.callout)
-        .foregroundStyle(SynthPalette.muted)
+        .foregroundStyle(palette.muted)
     }
 }
 
 private struct ToolRow: View {
+    @Environment(\.synthPalette) private var palette
     let tool: Synth.ToolCall
     let load: (@MainActor () async throws -> String)?
 
     var body: some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 8) {
-                Text(tool.arguments).textSelection(.enabled)
+                ToolArgumentsView(arguments: tool.arguments, showsDiff: tool.name == "edit" || tool.name == "write")
                 if let result = tool.result, !result.isEmpty || load != nil {
                     Divider()
                     ExpandableBody(preview: result, load: load)
@@ -214,15 +218,16 @@ private struct ToolRow: View {
                 Spacer()
                 Text(tool.status.replacingOccurrences(of: "_", with: " ").capitalized)
                     .font(.caption)
-                    .foregroundStyle(SynthPalette.muted)
+                    .foregroundStyle(palette.muted)
             }
         }
         .padding(10)
-        .background(SynthPalette.surface, in: RoundedRectangle(cornerRadius: 8))
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
 private struct ExpandableBody: View {
+    @Environment(\.synthPalette) private var palette
     let preview: String
     let load: (@MainActor () async throws -> String)?
     @State private var full: String?
@@ -234,7 +239,7 @@ private struct ExpandableBody: View {
             Text(full ?? preview)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
-            if let error { Text(error).foregroundStyle(SynthPalette.danger) }
+            if let error { Text(error).foregroundStyle(palette.danger) }
             if let load, full == nil {
                 Button(loading ? "Loading…" : "Load Full Text") {
                     Task {
