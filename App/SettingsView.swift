@@ -42,9 +42,13 @@ private struct NotificationSettings: View {
                     }
                 }
             }
-            Section("Events") {
+            Section {
                 Toggle("Permission requests and questions", isOn: $input)
                 Toggle("Turn outcomes and engine errors", isOn: $outcomes)
+            } header: {
+                Text("Alert Events")
+            } footer: {
+                Text("Sidebar dots mark unseen activity.")
             }
         }
         .formStyle(.grouped)
