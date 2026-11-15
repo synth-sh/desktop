@@ -1,28 +1,28 @@
-name: Release Desktop
+name: Verify Desktop signing
 
 on:
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+    branches:
+      - codex/desktop-signing-smoke
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-release-${{ github.ref }}
+  group: desktop-signing-smoke-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  verify:
     if: github.repository == 'synth-sh/desktop'
     runs-on: macos-26
     timeout-minutes: 60
-    permissions:
-      contents: write
     env:
       APP: DerivedData/Build/Products/Release/Synth.app
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: mlugg/setup-zig@v2
         with:
@@ -40,8 +40,8 @@ jobs:
         run: |
           Scripts/build-app.sh
           version=$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Release tag $GITHUB_REF_NAME differs from app version $version"
+          if [ "v$version" != "v0.1.0" ]; then
+            echo "::error::Test release version v0.1.0 differs from app version $version"
             exit 1
           fi
 
@@ -55,11 +55,12 @@ jobs:
           NOTARY_API_KEY: ${{ secrets.NOTARY_API_KEY }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
-        run: Scripts/package-release.sh "$APP" "synth-desktop-${GITHUB_REF_NAME#v}-macos-arm64.zip"
+        run: Scripts/package-release.sh "$APP" synth-desktop-0.1.0-macos-arm64.zip
 
-      - name: Publish stable release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Verify the packaged app
         run: |
-          gh release create "$GITHUB_REF_NAME" "synth-desktop-${GITHUB_REF_NAME#v}-macos-arm64.zip" \
-            --verify-tag --title "Synth Desktop $GITHUB_REF_NAME" --generate-notes
+          set -euo pipefail
+          extracted=$(mktemp -d)
+          ditto -x -k synth-desktop-0.1.0-macos-arm64.zip "$extracted"
+          codesign --verify --deep --strict --verbose=2 "$extracted/Synth.app"
+          xcrun stapler validate "$extracted/Synth.app"
