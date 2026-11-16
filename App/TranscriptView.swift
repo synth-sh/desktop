@@ -1,6 +1,5 @@
 import SwiftUI
 import SynthProtocol
-import Textual
 
 enum TranscriptAnchor: Hashable {
     case message(UInt64)
@@ -45,9 +44,8 @@ struct TranscriptView: View {
                     if let stream {
                         if !stream.thinking.isEmpty { ReasoningText(text: stream.thinking) }
                         if !stream.text.isEmpty {
-                            Text(stream.text)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            StreamingMarkdown(text: stream.text, identifier: sessionID + ":stream")
+                                .id(stream.request)
                         }
                     }
                     TranscriptNotices(notices: notices)
@@ -151,7 +149,7 @@ private struct TranscriptRow: View {
         if message.thinking?.isEmpty == false || message.thinkingBytes > 0 {
             ReasoningText(text: message.thinking ?? "", load: reasoningLoader)
         }
-        if !message.text.isEmpty { CompletedMarkdown(text: message.text) }
+        if !message.text.isEmpty { MarkdownView(text: message.text, identifier: "\(sessionID):\(message.seq)") }
         ForEach(Array(message.toolCalls.enumerated()), id: \.offset) { entry in
             ToolRow(tool: entry.element, load: resultLoader(entry.element, index: entry.offset))
         }
@@ -165,19 +163,6 @@ private struct TranscriptRow: View {
     private func resultLoader(_ tool: Synth.ToolCall, index: Int) -> BodyLoader? {
         guard tool.resultBytes > (tool.result?.utf8.count ?? 0) else { return nil }
         return { try await model.fullToolResult(sequence: message.seq, call: index, in: sessionID) }
-    }
-}
-
-private struct CompletedMarkdown: View {
-    let text: String
-
-    var body: some View {
-        StructuredText(markdown: text)
-            .textual.textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .environment(\.openURL, OpenURLAction { url in
-                ["https", "http", "mailto"].contains(url.scheme?.lowercased() ?? "") ? .systemAction : .discarded
-            })
     }
 }
 

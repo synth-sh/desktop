@@ -55,7 +55,8 @@ suggestions and **Tab** or **Return** to choose one.
 Paste, drop, or choose images and text files using **Attach Files**. Long
 pastes appear as removable text attachments that you can preview or insert back
 into your draft. The composer keeps each conversation's draft and attachments
-separate.
+separate. Conversation messages use the same Markdown styles as the composer.
+Select a linked file in a sent message to see the contents that went to the agent.
 
 Choose **Synth > Settings** (⌘,) to browse the bundled themes.
 Selecting a theme updates the conversation window immediately and saves your
