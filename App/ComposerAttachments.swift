@@ -125,9 +125,10 @@ extension ConversationModel {
             let file = try referenceURL(path)
             let values = try file.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey, .isRegularFileKey])
             if values.isDirectory == true { continue }
+            guard values.isRegularFile == true else { throw ComposerError.unsupportedFile }
             let maxBytes = FileReference.isImagePath(path) ? AttachmentImporter.imageLimit : 256 * 1024
-            guard values.isRegularFile == true, (values.fileSize ?? 0) <= maxBytes else {
-                throw ComposerError.missingReference(path)
+            guard (values.fileSize ?? 0) <= maxBytes else {
+                throw ComposerError.linkedFileTooLarge(path: path, limit: maxBytes)
             }
         }
     }

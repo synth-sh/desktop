@@ -87,7 +87,7 @@ struct RichComposer: View {
                 key: { _, event in controller.key(event, model: model, session: session) },
                 paste: { _, board in paste(board, session: session) },
                 selection: { view, inCode in
-                    DispatchQueue.main.async { controller.update(view, inCode: inCode, model: model, session: session) }
+                    controller.update(view, inCode: inCode, model: model, session: session)
                 },
                 openURL: { url in
                     if let path = FileReference.path(url: url) {
