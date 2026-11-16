@@ -61,6 +61,7 @@ public enum ComposerError: LocalizedError, Equatable {
     case invalidImage
     case compactWithAttachments
     case missingReference(String)
+    case linkedFileTooLarge(path: String, limit: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -70,6 +71,8 @@ public enum ComposerError: LocalizedError, Equatable {
         case .invalidImage: "This image cannot be decoded or is too large to preview."
         case .compactWithAttachments: "Choose /compact from the slash menu to keep this draft and its attachments."
         case .missingReference(let path): "Cannot attach \(path) from the current project."
+        case .linkedFileTooLarge(let path, let limit):
+            "\(path) exceeds the \(limit.formatted(.byteCount(style: .binary))) limit for linked files."
         }
     }
 }
