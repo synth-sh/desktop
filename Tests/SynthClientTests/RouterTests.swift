@@ -3,7 +3,10 @@ import SynthClient
 import SynthProtocol
 import Testing
 
-private struct TimedOut: Error {}
+private struct TimedOut: Error, CustomStringConvertible {
+    let line: Int
+    var description: String { "Timed out waiting for RouterTests.swift:\(line)" }
+}
 
 private struct Fixture {
     let root: URL
@@ -43,7 +46,7 @@ private struct Fixture {
 }
 
 func wait<Value: Sendable>(
-    for value: @Sendable () async -> Value?
+    line: Int = #line, for value: @Sendable () async -> Value?
 ) async throws -> Value {
     let clock = ContinuousClock()
     let deadline = clock.now + .seconds(6)
@@ -51,11 +54,11 @@ func wait<Value: Sendable>(
         if let result = await value() { return result }
         try await Task.sleep(for: .milliseconds(15))
     }
-    throw TimedOut()
+    throw TimedOut(line: line)
 }
 
-private func interaction(in session: String, from client: SynthClient) async throws -> Interaction {
-    try await wait { await client.interactions.values.first { $0.sessionID == session } }
+private func interaction(in session: String, from client: SynthClient, line: Int = #line) async throws -> Interaction {
+    try await wait(line: line) { await client.interactions.values.first { $0.sessionID == session } }
 }
 
 private func turn(_ text: String, session: String, client: SynthClient) -> Task<ACP.Prompted, any Error> {
@@ -236,4 +239,85 @@ private func verifySharedQuestion(
     try await guest.answer(guestQuestion.id, fields: ["answer": "the guest answered"])
     #expect(try await shared.value.stopReason == "end_turn")
     _ = try await wait { await client.interactions[hostQuestion.id] == nil ? true : nil }
+}
+
+@Test(
+    .enabled(if: ProcessInfo.processInfo.environment["SYNTH_TEST_ENGINE"] != nil, "Run the fake provider harness"),
+    .timeLimit(.minutes(1))
+)
+func richPromptsThroughRealRouter() async throws {
+    let env = ProcessInfo.processInfo.environment
+    let fixture = try Fixture(
+        engine: #require(env["SYNTH_TEST_ENGINE"]), provider: #require(env["SYNTH_TEST_PROVIDER"])
+    )
+    let client = fixture.client()
+    do {
+        try await verifyRichPrompts(fixture, client: client)
+    } catch {
+        await client.disconnect()
+        try? FileManager.default.removeItem(at: fixture.root)
+        throw error
+    }
+    await client.disconnect()
+    try FileManager.default.removeItem(at: fixture.root)
+}
+
+private func verifyRichPrompts(_ fixture: Fixture, client: SynthClient) async throws {
+    let path = "project notes.txt"
+    try "project fixture body".write(to: fixture.first.appending(path: path), atomically: true, encoding: .utf8)
+    let skillDir = fixture.first.appending(path: ".agents/skills/fixture-skill")
+    try FileManager.default.createDirectory(at: skillDir, withIntermediateDirectories: true)
+    try "---\nname: fixture-skill\ndescription: Fixture skill\n---\nSummarize the fixture.\n"
+        .write(to: skillDir.appending(path: "SKILL.md"), atomically: true, encoding: .utf8)
+
+    try await client.connect()
+    let session = try #require(try await client.newSession(cwd: fixture.first.path).sessionId)
+    let other = try #require(try await client.newSession(cwd: fixture.second.path).sessionId)
+    #expect(try await client.files(in: session).contains(path))
+    #expect(try await !client.files(in: other).contains(path))
+    #expect(await client.sessions[session]?.status?.vision == true)
+    try await verifyPromptLimit(in: session, client: client)
+    #expect(await client.sessions[session]?.skills.first { $0.id == "fixture-skill" }?.description == "Fixture skill")
+
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGOQ67kERAwQCgAmzgXxop4rCgAAAABJRU5ErkJggg=="
+    let data = try #require(Data(base64Encoded: png))
+    let draft = ComposerDraft(
+        markdown: "verify fixture attachments \(FileReference.markdown(path: path))",
+        attachments: [
+            .init(name: "Pasted text", body: .text("pasted fixture body")),
+            .init(name: "screenshot.png", body: .image(data))
+        ]
+    )
+    let active = turn("ask fixture choice", session: session, client: client)
+    let question = try await interaction(in: session, from: client)
+    let steered = Task { try await client.prompt(draft.content, in: session) }
+    _ = try await wait { await client.sessions[session]?.status?.steering.isEmpty == false ? true : nil }
+    try await client.answer(question.id, fields: ["answer": "Blue"])
+    #expect(try await active.value.stopReason == "end_turn")
+    #expect(try await steered.value.stopReason == "end_turn")
+    let live = try #require(await client.sessions[session])
+    #expect(live.messages.contains { $0.role == "assistant" && $0.text == "Fixture attachments verified" })
+    let sent = try #require(live.messages.first { $0.imageCount == 1 })
+    #expect(sent.attachments.map(\.path) == [path, "Pasted text"])
+    #expect(try await client.attachment(sequence: sent.seq, index: 0, in: session) == "project fixture body")
+    #expect(try await client.image(sequence: sent.seq, index: 0, in: session) == png)
+    await #expect(throws: RPCError.self) { try await client.image(sequence: sent.seq, index: 0, in: other) }
+
+    let imageOnly: [ACP.Content] = [.image(data: png)]
+    for _ in 0..<2 {
+        #expect(try await client.prompt(imageOnly, in: session).stopReason == "end_turn")
+    }
+    try await client.closeSession(session)
+    _ = try await client.loadSession(session, cwd: fixture.first.path)
+    let history = try await client.history(before: sent.seq + 1, in: session)
+    #expect(history.last?.imageCount == 1)
+    #expect(try await client.image(sequence: sent.seq, index: 0, in: session) == png)
+}
+
+private func verifyPromptLimit(in session: String, client: SynthClient) async throws {
+    let oversized = String(repeating: "x", count: LineFramer.maximumBytes)
+    await #expect(throws: ComposerError.payloadTooLarge) {
+        try await client.prompt(oversized, in: session)
+    }
+    #expect(await client.connectionState == .connected)
 }

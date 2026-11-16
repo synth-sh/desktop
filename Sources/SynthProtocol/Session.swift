@@ -130,17 +130,16 @@ public enum ACP {
     }
 
     public struct Prompt: Encodable, Sendable {
-        public struct Text: Encodable, Sendable {
-            public let type = "text"
-            public let text: String
-        }
-
         public let sessionId: String
-        public let prompt: [Text]
+        public let prompt: [Content]
 
         public init(sessionID: String, text: String) {
+            self.init(sessionID: sessionID, content: [.text(text)])
+        }
+
+        public init(sessionID: String, content: [Content]) {
             sessionId = sessionID
-            prompt = [.init(text: text)]
+            prompt = content
         }
     }
 
@@ -162,6 +161,7 @@ public enum Synth {
         public let messages: [Message]
         public let dropped: UInt64
         public let stream: Stream?
+        public let skills: Skills?
     }
 
     public struct Status: Decodable, Equatable, Sendable {
@@ -175,6 +175,7 @@ public enum Synth {
         public let model: String
         public let provider: String
         public let providerID: String
+        public let vision: Bool?
         public let providerMissing: Bool
         public let effort: String
         public let efforts: [String]
@@ -197,6 +198,7 @@ public enum Synth {
             case model
             case provider
             case providerID = "provider_id"
+            case vision
             case providerMissing = "provider_missing"
             case effort
             case efforts
@@ -220,6 +222,7 @@ public enum Synth {
         public let toolName: String?
         public let toolCallID: String?
         public let attachments: [Attachment]
+        public let imageCount: Int?
 
         public var id: UInt64 { seq }
 
@@ -234,6 +237,7 @@ public enum Synth {
             case toolName = "tool_name"
             case toolCallID = "tool_call_id"
             case attachments
+            case imageCount = "image_count"
         }
     }
 

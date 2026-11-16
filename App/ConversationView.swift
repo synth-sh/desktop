@@ -11,7 +11,7 @@ struct ConversationView: View {
     @State private var titleActionsPresented = false
     @State private var renameText = ""
     @State private var scrollAnchors: [String: TranscriptAnchor] = [:]
-    @FocusState private var composerFocused: Bool
+    @State private var composerFocused = false
 
     var body: some View {
         NavigationSplitView {
@@ -264,9 +264,8 @@ extension ConversationView {
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(SynthProminentButtonStyle())
-                .keyboardShortcut(.return, modifiers: .command)
                 .disabled(!model.canSend)
-                .help(model.busy ? "Steer (⌘↩)" : "Send (⌘↩)")
+                .help(model.busy ? "Steer (↩)" : "Send (↩)")
             }
         }
         .padding(14)
@@ -282,31 +281,7 @@ extension ConversationView {
     }
 
     private var composerInput: some View {
-        Text(model.draft + "\u{200B}")
-            .lineLimit(6)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 4)
-            .hidden()
-            .accessibilityHidden(true)
-            .frame(maxWidth: .infinity, minHeight: 24, alignment: .topLeading)
-            .overlay {
-                TextEditor(text: $model.draft)
-                    .scrollContentBackground(.hidden)
-                    .foregroundStyle(palette.foreground)
-                    .focused($composerFocused)
-                    .accessibilityLabel("Message")
-            }
-            .overlay(alignment: .topLeading) {
-                if model.draft.isEmpty {
-                    Text(model.busy ? "Steer the conversation" : "Message Synth")
-                        .foregroundStyle(palette.muted)
-                        .padding(.top, 4)
-                        .padding(.leading, 5)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-            }
-            .font(.body)
+        RichComposer(model: model, focused: $composerFocused)
     }
 
     private var connectionLabel: some View {

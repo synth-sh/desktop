@@ -75,6 +75,9 @@ struct TranscriptView: View {
             } action: { _, nearBottom in
                 if nearBottom || userScrolling { followsConversation = nearBottom }
             }
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, _ in
+                if followsConversation && !userScrolling { proxy.scrollTo(TranscriptAnchor.tail, anchor: .bottom) }
+            }
             .onScrollPhaseChange { previous, phase, context in
                 let trackingUser = phase == .interacting || phase == .decelerating
                 userScrolling = trackingUser
@@ -126,7 +129,7 @@ private struct TranscriptRow: View {
         case "user":
             VStack(alignment: .leading, spacing: 6) {
                 Text("You").font(.caption.weight(.semibold)).foregroundStyle(palette.muted)
-                Text(message.text).textSelection(.enabled)
+                UserMessageBody(message: message, sessionID: sessionID, model: model)
             }
             .padding(13)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
