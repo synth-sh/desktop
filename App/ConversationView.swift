@@ -243,7 +243,7 @@ struct ConversationView: View {
 
 extension ConversationView {
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             if !model.composerDraft.attachments.isEmpty {
                 ComposerAttachmentStrip(model: model, controller: composerController)
             }
