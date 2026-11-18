@@ -1,24 +1,23 @@
 import SwiftUI
 
 struct ModeControl: View {
-    let model: ConversationModel
-    @State private var showModes = false
+    @Bindable var model: ConversationModel
 
     var body: some View {
-        Button { showModes.toggle() } label: {
+        Button { model.showModePicker.toggle() } label: {
             ConversationPopoverLabel(title: modeLabel)
         }
         .accessibilityLabel("Mode")
         .accessibilityValue(modeLabel)
         .fixedSize()
-        .popover(isPresented: $showModes, arrowEdge: .top) {
+        .popover(isPresented: $model.showModePicker, arrowEdge: .top) {
             ConversationPopover {
                 Text("Mode").font(.headline)
                 VStack(spacing: 4) {
                     ForEach(model.modes) { mode in
                         let selected = mode.id == model.state?.status?.agent
                         Button {
-                            showModes = false
+                            model.showModePicker = false
                             Task { await model.selectMode(mode) }
                         } label: {
                             HStack {
@@ -33,7 +32,7 @@ struct ModeControl: View {
                 .buttonStyle(ConversationPopoverRowStyle())
             }
         }
-        .onChange(of: model.sessionID) { showModes = false }
+        .onChange(of: model.sessionID) { model.showModePicker = false }
     }
 
     private var modeLabel: String {
@@ -43,21 +42,20 @@ struct ModeControl: View {
 
 struct ConfigurationControls: View {
     @Environment(\.synthPalette) private var palette
-    let model: ConversationModel
-    @State private var showModels = false
+    @Bindable var model: ConversationModel
     @State private var modelListHeight: CGFloat = 300
 
     var body: some View {
         Button {
-            showModels.toggle()
+            model.showModelPicker.toggle()
             if !model.hasRequestedModels { Task { await model.fetchModels() } }
         } label: {
             ConversationPopoverLabel(title: modelLabel)
         }
         .accessibilityLabel("Model and reasoning effort")
         .accessibilityValue(modelLabel)
-        .popover(isPresented: $showModels, arrowEdge: .top) { models }
-        .onChange(of: model.sessionID) { showModels = false }
+        .popover(isPresented: $model.showModelPicker, arrowEdge: .top) { models }
+        .onChange(of: model.sessionID) { model.showModelPicker = false }
     }
 
     private var modelLabel: String {
@@ -89,7 +87,7 @@ struct ConfigurationControls: View {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(offeredModels) { offered in
                             Button {
-                                showModels = false
+                                model.showModelPicker = false
                                 Task { await model.selectModel(offered) }
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {

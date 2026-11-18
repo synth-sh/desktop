@@ -7,9 +7,9 @@ options:
 packages:
   SynthDesktop:
     path: .
-  Textual:
-    url: https://github.com/gonzalezreal/textual.git
-    exactVersion: "0.5.0"
+  MarkdownEngine:
+    url: https://github.com/synth-sh/swift-markdown-engine.git
+    revision: "c991a9f5341f6672f148c24955a9e14745c75a17"
 
 targets:
   Synth:
@@ -21,13 +21,17 @@ targets:
         type: syncedFolder
       - path: Assets.xcassets
         buildPhase: resources
+      - path: Licenses/MarkdownEngine.txt
+        buildPhase: resources
     dependencies:
       - package: SynthDesktop
         product: SynthClient
       - package: SynthDesktop
         product: SynthProtocol
-      - package: Textual
-        product: Textual
+      - package: MarkdownEngine
+        product: MarkdownEngine
+      - package: MarkdownEngine
+        product: MarkdownEngineCodeBlocks
     settings:
       base:
         ARCHS: arm64
@@ -39,7 +43,7 @@ targets:
         ALWAYS_SEARCH_USER_PATHS: "NO"
         ENABLE_APP_SANDBOX: "NO"
         GENERATE_INFOPLIST_FILE: "NO"
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "0.1.1"
         CURRENT_PROJECT_VERSION: "1"
         PRODUCT_NAME: Synth
         PRODUCT_BUNDLE_IDENTIFIER: sh.getsynth.desktop

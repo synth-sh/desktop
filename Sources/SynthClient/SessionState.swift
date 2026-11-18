@@ -1,6 +1,7 @@
 import SynthProtocol
 
 public struct SessionState: Sendable {
+    public private(set) var skills: [Synth.Skill] = []
     public private(set) var status: Synth.Status?
     public private(set) var messages: [Synth.Message] = []
     public private(set) var dropped: UInt64 = 0
@@ -15,6 +16,7 @@ public struct SessionState: Sendable {
     }
 
     mutating func replace(with snapshot: Synth.Snapshot) {
+        skills = snapshot.skills?.found ?? []
         status = snapshot.status
         messages = snapshot.messages
         dropped = snapshot.dropped

@@ -11,7 +11,8 @@ struct ConversationView: View {
     @State private var titleActionsPresented = false
     @State private var renameText = ""
     @State private var scrollAnchors: [String: TranscriptAnchor] = [:]
-    @FocusState private var composerFocused: Bool
+    @State private var composerFocused = false
+    @State private var composerController = ComposerController()
 
     var body: some View {
         NavigationSplitView {
@@ -242,6 +243,18 @@ struct ConversationView: View {
 
 extension ConversationView {
     private var composer: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if !model.composerDraft.attachments.isEmpty {
+                ComposerAttachmentStrip(model: model, controller: composerController)
+            }
+            composerBox
+        }
+        .frame(maxWidth: 780)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+    }
+
+    private var composerBox: some View {
         VStack(alignment: .leading, spacing: 9) {
             composerInput
             HStack(spacing: 12) {
@@ -264,9 +277,8 @@ extension ConversationView {
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(SynthProminentButtonStyle())
-                .keyboardShortcut(.return, modifiers: .command)
                 .disabled(!model.canSend)
-                .help(model.busy ? "Steer (⌘↩)" : "Send (⌘↩)")
+                .help(model.busy ? "Steer (↩)" : "Send (↩)")
             }
         }
         .padding(14)
@@ -276,37 +288,10 @@ extension ConversationView {
                 .strokeBorder(composerFocused ? palette.accent : palette.border)
                 .allowsHitTesting(false)
         }
-        .frame(maxWidth: 780)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
     }
 
     private var composerInput: some View {
-        Text(model.draft + "\u{200B}")
-            .lineLimit(6)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 4)
-            .hidden()
-            .accessibilityHidden(true)
-            .frame(maxWidth: .infinity, minHeight: 24, alignment: .topLeading)
-            .overlay {
-                TextEditor(text: $model.draft)
-                    .scrollContentBackground(.hidden)
-                    .foregroundStyle(palette.foreground)
-                    .focused($composerFocused)
-                    .accessibilityLabel("Message")
-            }
-            .overlay(alignment: .topLeading) {
-                if model.draft.isEmpty {
-                    Text(model.busy ? "Steer the conversation" : "Message Synth")
-                        .foregroundStyle(palette.muted)
-                        .padding(.top, 4)
-                        .padding(.leading, 5)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-            }
-            .font(.body)
+        RichComposer(model: model, focused: $composerFocused, controller: composerController)
     }
 
     private var connectionLabel: some View {

@@ -17,7 +17,11 @@ final class ConversationModel {
     var loadingHistory: Set<String> = []
     var openedSessions: [String: OpenedConversation] = [:]
     var historyBySession: [String: [Synth.Message]] = [:]
-    var drafts: [String: String] = [:]
+    var drafts: [String: ComposerDraft] = [:]
+    var importingAttachments: [String: Int] = [:]
+    var failedDrafts: [String: [ComposerDraft]] = [:]
+    var showModelPicker = false
+    var showModePicker = false
     var failures: [String: String] = [:]
     var didRestore = false
     private(set) var modes: [ACP.Mode] = []
@@ -28,16 +32,11 @@ final class ConversationModel {
     private(set) var modelError: String?
     private(set) var isFetchingModels = false
     private var modelsRequested = false
-    private var submissions: [String: Int] = [:]
-    private var stopping: Set<String> = []
+    var submissions: [String: Int] = [:]
+    var stopping: Set<String> = []
     var client: SynthClient?
     private var observingAttention: Task<Void, Never>?
     private var observing: Task<Void, Never>?
-
-    var draft: String {
-        get { sessionID.flatMap { drafts[$0] } ?? "" }
-        set { if let sessionID { drafts[sessionID] = newValue } }
-    }
 
     private var submitting: Int { sessionID.flatMap { submissions[$0] } ?? 0 }
     private var stopRequested: Bool { sessionID.map(stopping.contains) ?? false }
@@ -52,7 +51,8 @@ final class ConversationModel {
         connection == .connected && sessionID != nil && !isOpening && !isShuttingDown &&
             !isUpdatingConfiguration && state?.failure == nil &&
             state?.status?.providerMissing == false && !stopRequested &&
-            !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            !composerDraft.isEmpty && !isImportingAttachments &&
+            (state?.status?.vision != false || !composerDraft.hasImages)
     }
     var canStop: Bool {
         connection == .connected && sessionID != nil && busy && !stopRequested && state?.failure == nil
@@ -263,6 +263,7 @@ extension ConversationModel {
             if opened.id != previous {
                 openedSessions.removeValue(forKey: previous)
                 drafts[opened.id] = drafts.removeValue(forKey: previous)
+                failedDrafts[opened.id] = failedDrafts.removeValue(forKey: previous)
             }
             observing?.cancel()
             self.client = engine
@@ -284,33 +285,6 @@ extension ConversationModel {
         modes = []
         error = nil
         persist()
-    }
-
-    func send() async {
-        guard canSend, let client, let sessionID else { return }
-        let text = draft
-        drafts[sessionID] = ""
-        failures.removeValue(forKey: sessionID)
-        error = nil
-        submissions[sessionID, default: 0] += 1
-        defer {
-            submissions[sessionID, default: 1] -= 1
-            if submissions[sessionID] == 0 {
-                submissions.removeValue(forKey: sessionID)
-                stopping.remove(sessionID)
-            }
-        }
-        do {
-            _ = try await client.prompt(text, in: sessionID)
-        } catch {
-            if drafts[sessionID, default: ""].isEmpty { drafts[sessionID] = text }
-            failures[sessionID] = error.localizedDescription
-            if self.sessionID == sessionID { self.error = error.localizedDescription }
-        }
-        await refresh(from: client)
-        if let opened = openedSessions[sessionID] {
-            await loadGroup(opened.folder, refresh: true)
-        }
     }
 
     func stop() async {

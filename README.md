@@ -43,8 +43,20 @@ directory. To work in a folder, choose **Open Project** or use the plus
 button next to an existing project.
 
 The sidebar shows when a background conversation is running or needs input.
-Select **More Conversations** to load older chats. Press **Command–Return**
-to send or steer, or click **Stop** to cancel the current turn.
+Select **More Conversations** to load older chats. Press **Return** to send or
+steer, **Shift–Return** for a new line, or **Stop** to cancel the current turn.
+
+The composer renders Markdown as you type and reveals the syntax around your
+caret. Use **Format** or the usual Bold, Italic, and Link shortcuts. Type `/`
+at the start of a draft to discover actions and skills, or type `@` to select a
+project file and include its contents. Use the arrow keys to move through
+suggestions and **Tab** or **Return** to choose one.
+
+Paste, drop, or choose images and text files using **Attach Files**. Long
+pastes appear as removable text attachments that you can preview or insert back
+into your draft. The composer keeps each conversation's draft and attachments
+separate. Conversation messages use the same Markdown styles as the composer.
+Select a linked file in a sent message to see the contents that went to the agent.
 
 Choose **Synth > Settings** (⌘,) to browse the bundled themes.
 Selecting a theme updates the conversation window immediately and saves your

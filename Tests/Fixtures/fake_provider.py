@@ -34,10 +34,22 @@ class Handler(BaseHTTPRequestHandler):
         messages = request["messages"]
         last = messages[-1]
         prompt = last.get("content")
-        if isinstance(prompt, list):
-            prompt = "".join(block.get("text", "") for block in prompt)
+        parts = prompt if isinstance(prompt, list) else []
+        if parts:
+            prompt = "".join(block.get("text", "") for block in parts)
         delta = {"content": "Fixture complete: " + str(prompt)[:120]}
         finish = "stop"
+
+        if isinstance(prompt, str) and prompt.startswith("verify fixture attachments"):
+            image_urls = [block["image_url"]["url"] for block in parts if block["type"] == "image_url"]
+            valid = (
+                prompt.count("<file path=\"project notes.txt\">") == 1
+                and prompt.count("project fixture body") == 1
+                and prompt.count("pasted fixture body") == 1
+                and len(image_urls) == 1
+                and image_urls[0].startswith("data:image/png;base64,")
+            )
+            delta = {"content": "Fixture attachments verified" if valid else "Fixture attachments incomplete"}
 
         if last["role"] == "user":
             tool = {

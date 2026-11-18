@@ -168,17 +168,6 @@ extension SynthClient {
         changed()
     }
 
-    public func prompt(_ text: String, in sessionID: String) async throws -> ACP.Prompted {
-        try requireConnected()
-        do {
-            return try await call("session/prompt", ACP.Prompt(sessionID: sessionID, text: text), as: ACP.Prompted.self)
-        } catch let error as RPCError where error.code == -32603 &&
-            ["the session's agent stopped", "no such session"].contains(error.message) {
-            markSessionFailed(sessionID, error: error, report: true)
-            throw error
-        }
-    }
-
     public func cancelTurn(in sessionID: String) async throws {
         try requireConnected()
         try await write(Envelope.call("session/cancel", params: ACP.SessionRef(sessionID)))

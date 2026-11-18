@@ -177,6 +177,7 @@ extension ConversationModel {
         openedSessions.removeValue(forKey: identifier)
         historyBySession.removeValue(forKey: identifier)
         drafts.removeValue(forKey: identifier)
+        failedDrafts.removeValue(forKey: identifier)
         failures.removeValue(forKey: identifier)
         notifications.acknowledge(identifier)
         clearSelection()
