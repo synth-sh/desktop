@@ -200,13 +200,14 @@ struct RichComposer: View {
 }
 
 struct ComposerAttachmentStrip: View {
+    @Environment(\.synthPalette) private var palette
     let model: ConversationModel
     let controller: ComposerController
     @State private var preview: ComposerAttachment?
 
     var body: some View {
         ScrollView(.horizontal) {
-            HStack {
+            HStack(spacing: 8) {
                 ForEach(model.composerDraft.attachments) { item in
                     DraftAttachmentChip(
                         item: item, open: { preview = item },
@@ -217,14 +218,27 @@ struct ComposerAttachmentStrip: View {
                     )
                 }
             }
+            .padding(8)
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.visible)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16).strokeBorder(palette.border)
+                .allowsHitTesting(false)
+        }
         .sheet(item: $preview) { AttachmentPreview(attachment: $0) }
         .id(model.sessionID)
     }
 }
 
 private struct DraftAttachmentChip: View {
+    private struct HoverPreview: Identifiable {
+        let id = UUID()
+        let image: CGImage
+    }
+
     @Environment(\.synthPalette) private var palette
     let item: ComposerAttachment
     let open: () -> Void
@@ -232,19 +246,19 @@ private struct DraftAttachmentChip: View {
     let remove: () -> Void
     @State private var thumbnail: CGImage?
     @State private var hovering = false
-    @State private var hoverImage: CGImage?
-    @State private var showsPreview = false
+    @State private var hoverPreview: HoverPreview?
 
     var body: some View {
         HStack(spacing: 8) {
             Button(action: open) {
-                HStack {
+                HStack(spacing: 8) {
                     if let thumbnail {
-                        Image(decorative: thumbnail, scale: 2).resizable().scaledToFit().frame(width: 40, height: 32)
+                        Image(decorative: thumbnail, scale: 2).resizable().scaledToFit().frame(width: 56, height: 48)
                     } else {
                         Image(systemName: item.isImage ? "photo" : "doc.text")
                     }
                     Text(item.name).lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: 140, alignment: .leading)
                 }
             }
             .buttonStyle(.plain)
@@ -253,35 +267,41 @@ private struct DraftAttachmentChip: View {
                 Button("Insert", systemImage: "text.insert") { insert(text) }
                     .labelStyle(.iconOnly).buttonStyle(.plain).help("Insert into message")
             }
-            Button("Remove \(item.name)", systemImage: "xmark.circle.fill", action: remove)
-                .labelStyle(.iconOnly).buttonStyle(.plain)
+            Button(action: remove) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 15))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(item.name)")
+            .help("Remove \(item.name)")
         }
         .font(.caption)
-        .padding(8)
-        .background(palette.alternateSurface, in: RoundedRectangle(cornerRadius: 8))
+        .padding(.leading, 8)
+        .padding(.trailing, 4)
+        .padding(.vertical, 8)
+        .background(palette.alternateSurface, in: RoundedRectangle(cornerRadius: 10))
         .onHover { hovering = $0 }
-        .popover(isPresented: $showsPreview, arrowEdge: .top) {
-            if let hoverImage {
-                Image(decorative: hoverImage, scale: 2).resizable().scaledToFit()
-                    .frame(width: 320, height: 240)
-                    .padding(8)
-                    .accessibilityLabel(item.name)
-            }
+        .popover(item: $hoverPreview, arrowEdge: .top) { preview in
+            Image(decorative: preview.image, scale: 2).resizable().scaledToFit()
+                .frame(width: 320, height: 240)
+                .padding(8)
+                .accessibilityLabel(item.name)
         }
         .task(id: hovering) {
-            showsPreview = false
+            hoverPreview = nil
             guard hovering, case .image(let data) = item.body else { return }
             do {
                 try await Task.sleep(for: .milliseconds(350))
             } catch { return }
             let image = await Task.detached { AttachmentImporter.thumbnail(data, maxPixels: 640) }.value
             guard !Task.isCancelled else { return }
-            hoverImage = image
-            showsPreview = image != nil
+            if let image { hoverPreview = HoverPreview(image: image) }
         }
         .task(id: item.id) {
             guard case .image(let data) = item.body else { return }
-            thumbnail = await Task.detached { AttachmentImporter.thumbnail(data, maxPixels: 96) }.value
+            thumbnail = await Task.detached { AttachmentImporter.thumbnail(data, maxPixels: 128) }.value
         }
     }
 }
