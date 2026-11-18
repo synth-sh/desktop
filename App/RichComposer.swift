@@ -98,7 +98,9 @@ struct RichComposer: View {
         .overlay(alignment: .top) {
             if focused && controller.showsCompletions {
                 completions
-                    .alignmentGuide(.top) { $0[.bottom] + 8 }
+                    .visualEffect { content, geometry in
+                        content.offset(y: -geometry.size.height - 8)
+                    }
             }
         }
         .zIndex(1)
