@@ -79,6 +79,7 @@ final class ComposerController {
 
     private var isCompletingFiles: Bool { query?.isFile == true && query != dismissedQuery }
     var fileError: String? { isCompletingFiles ? pathLookupError : nil }
+    var showsCompletions: Bool { !choices.isEmpty || isCompletingFiles }
     var fileRequest: String? {
         isCompletingFiles && paths == nil && pathLookupError == nil ? session : nil
     }
