@@ -9,22 +9,12 @@ struct RichComposer: View {
     @Environment(\.colorScheme) private var colorScheme
     @Bindable var model: ConversationModel
     @Binding var focused: Bool
-    @State private var controller = ComposerController()
+    let controller: ComposerController
     @State private var preview: ComposerAttachment?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             editor
-            if !controller.choices.isEmpty { completions }
-            if controller.fileRequest != nil { ProgressView("Finding project files…").controlSize(.small) }
-            if let error = controller.fileError {
-                HStack {
-                    Text(error).foregroundStyle(palette.danger)
-                    Button("Retry") { controller.refreshFiles() }
-                }
-                .font(.caption)
-            }
-            if !model.composerDraft.attachments.isEmpty { attachments }
             if model.isImportingAttachments { ProgressView("Preparing attachments…").controlSize(.small) }
             if model.state?.status?.vision == false && model.composerDraft.hasImages {
                 Text("This model cannot see images. Choose a vision model or remove the images.")
@@ -105,21 +95,44 @@ struct RichComposer: View {
         )
         .frame(height: controller.height)
         .accessibilityLabel("Message")
+        .overlay(alignment: .top) {
+            if focused && controller.showsCompletions {
+                completions
+                    .alignmentGuide(.top) { $0[.bottom] + 8 }
+            }
+        }
+        .zIndex(1)
     }
 
     private var completions: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(controller.choices.enumerated()), id: \.element.id) { index, choice in
-                        completionRow(choice, index: index)
+        VStack(alignment: .leading, spacing: 8) {
+            if controller.fileRequest != nil {
+                ProgressView("Finding project files…").controlSize(.small)
+            } else if let error = controller.fileError {
+                Text(error).foregroundStyle(palette.danger).fixedSize(horizontal: false, vertical: true)
+                Button("Retry") { controller.refreshFiles() }
+            } else if controller.choices.isEmpty {
+                Text("No matching files").foregroundStyle(palette.muted)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(controller.choices.enumerated()), id: \.element.id) { index, choice in
+                                completionRow(choice, index: index)
+                            }
+                        }
                     }
+                    .frame(height: min(5, CGFloat(controller.choices.count)) * 42)
+                    .onChange(of: controller.selection) { proxy.scrollTo(controller.selection) }
                 }
             }
-            .frame(height: min(5, CGFloat(controller.choices.count)) * 42)
-            .onChange(of: controller.selection) { proxy.scrollTo(controller.selection) }
         }
-        .background(palette.background, in: RoundedRectangle(cornerRadius: 6))
+        .font(.callout)
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 10))
+        .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(palette.border) }
+        .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
     }
 
     private func completionRow(_ choice: ComposerController.Choice, index: Int) -> some View {
@@ -137,22 +150,6 @@ struct RichComposer: View {
         .buttonStyle(.plain)
         .id(index)
         .accessibilityAddTraits(index == controller.selection ? .isSelected : [])
-    }
-
-    private var attachments: some View {
-        ScrollView(.horizontal) {
-            HStack {
-                ForEach(model.composerDraft.attachments) { item in
-                    DraftAttachmentChip(
-                        item: item, open: { preview = item },
-                        insert: { text in
-                            if controller.insert(text) { model.removeAttachment(item.id) }
-                        },
-                        remove: { model.removeAttachment(item.id) }
-                    )
-                }
-            }
-        }
     }
 
     private func loadFiles(in session: String) async {
@@ -200,6 +197,31 @@ struct RichComposer: View {
     }
 }
 
+struct ComposerAttachmentStrip: View {
+    let model: ConversationModel
+    let controller: ComposerController
+    @State private var preview: ComposerAttachment?
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack {
+                ForEach(model.composerDraft.attachments) { item in
+                    DraftAttachmentChip(
+                        item: item, open: { preview = item },
+                        insert: { text in
+                            if controller.insert(text) { model.removeAttachment(item.id) }
+                        },
+                        remove: { model.removeAttachment(item.id) }
+                    )
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+        .sheet(item: $preview) { AttachmentPreview(attachment: $0) }
+        .id(model.sessionID)
+    }
+}
+
 private struct DraftAttachmentChip: View {
     @Environment(\.synthPalette) private var palette
     let item: ComposerAttachment
@@ -207,6 +229,9 @@ private struct DraftAttachmentChip: View {
     let insert: (String) -> Void
     let remove: () -> Void
     @State private var thumbnail: CGImage?
+    @State private var hovering = false
+    @State private var hoverImage: CGImage?
+    @State private var showsPreview = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -232,6 +257,26 @@ private struct DraftAttachmentChip: View {
         .font(.caption)
         .padding(8)
         .background(palette.alternateSurface, in: RoundedRectangle(cornerRadius: 8))
+        .onHover { hovering = $0 }
+        .popover(isPresented: $showsPreview, arrowEdge: .top) {
+            if let hoverImage {
+                Image(decorative: hoverImage, scale: 2).resizable().scaledToFit()
+                    .frame(width: 320, height: 240)
+                    .padding(8)
+                    .accessibilityLabel(item.name)
+            }
+        }
+        .task(id: hovering) {
+            showsPreview = false
+            guard hovering, case .image(let data) = item.body else { return }
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+            } catch { return }
+            let image = await Task.detached { AttachmentImporter.thumbnail(data, maxPixels: 640) }.value
+            guard !Task.isCancelled else { return }
+            hoverImage = image
+            showsPreview = image != nil
+        }
         .task(id: item.id) {
             guard case .image(let data) = item.body else { return }
             thumbnail = await Task.detached { AttachmentImporter.thumbnail(data, maxPixels: 96) }.value

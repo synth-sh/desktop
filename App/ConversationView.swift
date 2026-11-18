@@ -12,6 +12,7 @@ struct ConversationView: View {
     @State private var renameText = ""
     @State private var scrollAnchors: [String: TranscriptAnchor] = [:]
     @State private var composerFocused = false
+    @State private var composerController = ComposerController()
 
     var body: some View {
         NavigationSplitView {
@@ -242,6 +243,18 @@ struct ConversationView: View {
 
 extension ConversationView {
     private var composer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !model.composerDraft.attachments.isEmpty {
+                ComposerAttachmentStrip(model: model, controller: composerController)
+            }
+            composerBox
+        }
+        .frame(maxWidth: 780)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+    }
+
+    private var composerBox: some View {
         VStack(alignment: .leading, spacing: 9) {
             composerInput
             HStack(spacing: 12) {
@@ -275,13 +288,10 @@ extension ConversationView {
                 .strokeBorder(composerFocused ? palette.accent : palette.border)
                 .allowsHitTesting(false)
         }
-        .frame(maxWidth: 780)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
     }
 
     private var composerInput: some View {
-        RichComposer(model: model, focused: $composerFocused)
+        RichComposer(model: model, focused: $composerFocused, controller: composerController)
     }
 
     private var connectionLabel: some View {
