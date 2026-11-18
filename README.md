@@ -22,8 +22,8 @@ network access for the engine and Swift packages. To use a compatible engine
 you built yourself, set `SYNTH_ENGINE` to its absolute path.
 
 Open `DerivedData/Build/Products/Release/Synth.app` in Finder. The app uses
-the same provider configuration and credentials as the terminal client. Run
-`synth` in Terminal first if you need to configure a provider.
+the same provider configuration and credentials as the terminal client.
+Manage provider credentials and MCP servers under **Settings > Models & MCP**.
 
 To build in Xcode, run `xcodegen` before opening `Synth.xcodeproj`. A
 successful run of the build script supplies the default engine at
@@ -61,6 +61,11 @@ Select a linked file in a sent message to see the contents that went to the agen
 Choose **Synth > Settings** (⌘,) to browse the bundled themes.
 Selecting a theme updates the conversation window immediately and saves your
 choice for the next launch.
+
+Use **Synth > Settings > Models & MCP** to connect providers and add, edit,
+or remove MCP server definitions. Model and reasoning selection remains in
+the conversation's model picker. MCP definition changes apply to new
+conversations; enabling and disabling a loaded server applies immediately.
 
 Open **Synth > Settings > Notifications** to control alerts for input
 requests and turn outcomes, and choose where sounds play. Select

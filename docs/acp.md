@@ -26,7 +26,10 @@ are in flight.
 | `_synth/compact` | `sessionId`. Starts compaction for an idle conversation. |
 | `_synth/load_attachment` | `sessionId`, message `seq`, and zero-based `index`. Returns the stored text attachment. |
 | `_synth/load_image` | `sessionId`, message `seq`, and zero-based `index`. Returns one stored image as a base64 string. |
-| `_synth/models` | `sessionId`. Returns cached offers and a count of pending provider lookups. The engine sends `_synth/models_updated` as lookups finish. |
+| `_synth/models` | `sessionId`. Returns cached offers, project recents, and pending provider lookups. The engine sends `_synth/models_updated` as lookups finish. |
+| `_synth/providers` | `sessionId`. Returns provider IDs, hosts, connection state, and the active provider. |
+| `_synth/connect_provider` | `sessionId`, provider ID, host, and optional API key. Connects or starts OAuth sign-in. |
+| `_synth/toggle_mcp` | `sessionId` and server name. Enables or disables a configured MCP server in the running session. |
 | `$/cancel_request` | Notification with `requestId`. Withdraws an individual request. Withdrawing a prompt request leaves the turn running. |
 
 The desktop composer uses three prompt block types:

@@ -1,20 +1,26 @@
 import SwiftUI
 import UserNotifications
 
+enum SettingsPage: Hashable { case themes, notifications, modelsAndMCP }
+
 struct SettingsView: View {
     @Binding var theme: String
-    let notifications: ConversationNotifications
+    @Bindable var model: ConversationModel
 
     var body: some View {
-        TabView {
-            Tab("Themes", systemImage: "paintpalette") {
+        TabView(selection: $model.settingsPage) {
+            Tab("Themes", systemImage: "paintpalette", value: .themes) {
                 ThemePicker(selection: $theme)
             }
-            Tab("Notifications", systemImage: "bell") {
-                NotificationSettings(notifications: notifications)
+            Tab("Notifications", systemImage: "bell", value: .notifications) {
+                NotificationSettings(notifications: model.notifications)
+            }
+            Tab("Models & MCP", systemImage: "slider.horizontal.3", value: .modelsAndMCP) {
+                EngineSettings(model: model)
             }
         }
-        .frame(width: 536, height: 340)
+        .frame(width: model.settingsPage == .modelsAndMCP ? 660 : 536,
+               height: model.settingsPage == .modelsAndMCP ? 465 : 340)
     }
 }
 

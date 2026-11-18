@@ -34,7 +34,7 @@ struct SynthApp: App {
             }
         }
         Settings {
-            SettingsView(theme: $themeID, notifications: delegate.model.notifications)
+            SettingsView(theme: $themeID, model: delegate.model)
         }
     }
 }

@@ -15,8 +15,12 @@ extension SynthClient {
         _ = try await call("session/set_mode", ACP.SetMode(sessionID: sessionID, modeID: modeID), as: ACP.Empty.self)
     }
 
-    public func setModel(_ model: Synth.Model, in sessionID: String) async throws {
-        try await setConfiguration("model", value: model.name, provider: model.providerID, in: sessionID)
+    public func setModel(_ model: Synth.Model, effort: String? = nil, in sessionID: String) async throws {
+        try await setModel(model.name, provider: model.providerID, effort: effort, in: sessionID)
+    }
+
+    public func setModel(_ name: String, provider: String, effort: String? = nil, in sessionID: String) async throws {
+        try await setConfiguration("model", value: name, provider: provider, effort: effort, in: sessionID)
     }
 
     public func setEffort(_ effort: String, in sessionID: String) async throws {
@@ -24,10 +28,12 @@ extension SynthClient {
     }
 
     private func setConfiguration(
-        _ option: String, value: String, provider: String? = nil, in sessionID: String
+        _ option: String, value: String, provider: String? = nil, effort: String? = nil, in sessionID: String
     ) async throws {
         try requireConnected()
-        let request = ACP.SetConfiguration(sessionID: sessionID, configID: option, value: value, provider: provider)
+        let request = ACP.SetConfiguration(
+            sessionID: sessionID, configID: option, value: value, provider: provider, effort: effort
+        )
         _ = try await call("session/set_config_option", request, as: ACP.Empty.self)
     }
 

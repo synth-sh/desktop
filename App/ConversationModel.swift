@@ -7,6 +7,8 @@ import SynthProtocol
 @Observable
 final class ConversationModel {
     let notifications = ConversationNotifications()
+    var settingsPage = SettingsPage.themes
+    var engineSettingsPage = EngineSettingsPage.providers
     private(set) var project: URL?
     private(set) var sessionID: String?
     private(set) var state: SessionState?
@@ -30,8 +32,7 @@ final class ConversationModel {
     private(set) var isShuttingDown = false
     private(set) var isUpdatingConfiguration = false
     private(set) var modelError: String?
-    private(set) var isFetchingModels = false
-    private var modelsRequested = false
+    private var fetchingModels: Set<String> = []
     var submissions: [String: Int] = [:]
     var stopping: Set<String> = []
     var client: SynthClient?
@@ -46,7 +47,7 @@ final class ConversationModel {
     var busy: Bool {
         submitting > 0 || (connection == .connected && state?.failure == nil && state?.status?.isBusy == true)
     }
-    var canSwitch: Bool { !isOpening && !isShuttingDown }
+    var canSwitch: Bool { !isOpening && !isShuttingDown && !isUpdatingConfiguration }
     var canSend: Bool {
         connection == .connected && sessionID != nil && !isOpening && !isShuttingDown &&
             !isUpdatingConfiguration && state?.failure == nil &&
@@ -57,12 +58,19 @@ final class ConversationModel {
     var canStop: Bool {
         connection == .connected && sessionID != nil && busy && !stopRequested && state?.failure == nil
     }
-    var canConfigure: Bool {
-        sessionID != nil && connection == .connected && !busy && !isOpening &&
-            !isUpdatingConfiguration && !isFetchingModels && state?.failure == nil
+    var canReadConfiguration: Bool {
+        sessionID != nil && connection == .connected && !isOpening && !isShuttingDown &&
+            state?.status != nil && state?.failure == nil
+    }
+    var canConfigure: Bool { canReadConfiguration && !busy && !isUpdatingConfiguration }
+    var activeProviderID: String? {
+        guard let status = state?.status, !status.providerMissing else { return nil }
+        return status.providerID
     }
     var canDelete: Bool { canSwitch && connection == .connected && sessionID != nil && !busy }
-    var loadingModels: Bool { isFetchingModels || (state?.models?.pending ?? 0) > 0 }
+    var loadingModels: Bool {
+        (sessionID.map(fetchingModels.contains) ?? false) || (state?.models?.pending ?? 0) > 0
+    }
 
     func open(in folder: URL? = nil, stored: ACP.SessionInfo? = nil, identifier: String? = nil) async {
         guard canSwitch else { return }
@@ -119,12 +127,11 @@ final class ConversationModel {
         modes = opened.modes
         error = failures[opened.id]
         modelError = nil
-        modelsRequested = false
         persist()
     }
 
     func reconnect() async {
-        guard !isOpening else { return }
+        guard canSwitch else { return }
         guard let client, let sessionID else {
             await open(in: pendingSelection?.folder, identifier: pendingSelection?.sessionID)
             for folder in groups.compactMap(\.folder) {
@@ -145,7 +152,6 @@ final class ConversationModel {
                 setup = nil
             }
             if let modes = setup?.modes?.availableModes { self.modes = modes }
-            modelsRequested = false
             modelError = nil
             await refresh(from: client)
             await refreshHistory()
@@ -299,44 +305,42 @@ extension ConversationModel {
     }
 }
 
-extension ConversationModel {
-    var hasRequestedModels: Bool { modelsRequested }
+private struct ConfigurationUnavailable: LocalizedError {
+    var errorDescription: String? { "This conversation is not ready for changes." }
+}
 
+extension ConversationModel {
     func fetchModels() async {
-        guard canConfigure, let client, let sessionID else { return }
+        guard canReadConfiguration, let client, let sessionID, fetchingModels.insert(sessionID).inserted else { return }
         modelError = nil
-        modelsRequested = true
-        isFetchingModels = true
-        defer { isFetchingModels = false }
+        defer { fetchingModels.remove(sessionID) }
         do {
             try await client.fetchModels(in: sessionID)
-        } catch {
+        } catch where !Task.isCancelled && self.sessionID == sessionID && self.client === client {
             modelError = error.localizedDescription
-        }
+        } catch {}
     }
 
     func selectMode(_ mode: ACP.Mode) async {
-        await configure { try await $0.setMode(mode.id, in: $1) }
-    }
-
-    func selectModel(_ model: Synth.Model) async {
-        await configure { try await $0.setModel(model, in: $1) }
-    }
-
-    func selectEffort(_ effort: String) async {
-        await configure { try await $0.setEffort(effort, in: $1) }
-    }
-
-    private func configure(_ operation: (SynthClient, String) async throws -> Void) async {
-        guard canConfigure, let client, let sessionID else { return }
-        isUpdatingConfiguration = true
-        defer { isUpdatingConfiguration = false }
+        guard canConfigure, let sessionID else { return }
         do {
-            try await operation(client, sessionID)
-            await refresh(from: client)
+            try await configure(in: sessionID) { try await $0.setMode(mode.id, in: $1) }
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    func configure(in session: String, _ operation: (SynthClient, String) async throws -> Void) async throws {
+        guard canConfigure, sessionID == session, let client else { throw ConfigurationUnavailable() }
+        isUpdatingConfiguration = true
+        defer { isUpdatingConfiguration = false }
+        do {
+            try await operation(client, session)
+        } catch {
+            await refresh(from: client)
+            throw error
+        }
+        await refresh(from: client)
     }
 
     func decide(_ request: RequestID, option: String) async {

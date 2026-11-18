@@ -177,6 +177,8 @@ public enum Synth {
         public let providerID: String
         public let vision: Bool?
         public let providerMissing: Bool
+        public let signIn: SignIn?
+        public let mcp: [MCPServer]?
         public let effort: String
         public let efforts: [String]
         public let request: UInt64?
@@ -200,6 +202,8 @@ public enum Synth {
             case providerID = "provider_id"
             case vision
             case providerMissing = "provider_missing"
+            case signIn = "sign_in"
+            case mcp
             case effort
             case efforts
             case request

@@ -3,6 +3,7 @@ import SynthClient
 import SynthProtocol
 
 struct ConversationView: View {
+    @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
     @Environment(\.synthPalette) private var palette
     @Bindable var model: ConversationModel
@@ -211,12 +212,28 @@ struct ConversationView: View {
         if let failure = connectionFailure {
             banner(failure, actionTitle: "Reconnect") { await model.reconnect() }
         } else if model.state?.status?.providerMissing == true {
-            banner(model.error ?? "Set up a provider by running synth in Terminal.", actionTitle: "Retry") {
-                await model.retryProvider()
-            }
+            providerBanner
         } else if let error = model.error {
             banner(error, actionTitle: "Dismiss") { model.error = nil }
         }
+    }
+
+    private var providerBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.circle").foregroundStyle(palette.accent)
+            Text(model.error ?? "Connect a provider to start chatting.").textSelection(.enabled)
+            Spacer()
+            Button("Retry") { Task { await model.retryProvider() } }
+                .disabled(!model.canSwitch || model.anyBusy)
+            Button("Manage Providers…") {
+                model.settingsPage = .modelsAndMCP
+                model.engineSettingsPage = .providers
+                openSettings()
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 10)
+        .background(palette.alternateSurface)
     }
 
     private var connectionFailure: String? {
@@ -263,7 +280,7 @@ extension ConversationView {
                     .disabled(!model.canConfigure)
                 Spacer()
                 ConfigurationControls(model: model)
-                    .disabled(!model.canConfigure)
+                    .disabled(!model.canReadConfiguration)
                 if model.busy {
                     Button("Stop", systemImage: "stop.fill") {
                         Task { await model.stop() }
