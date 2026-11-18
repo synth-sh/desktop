@@ -1,4 +1,5 @@
 import AppKit
+import MarkdownEngine
 import SwiftUI
 import SynthClient
 import SynthProtocol
@@ -15,7 +16,11 @@ struct UserMessageBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !message.text.isEmpty {
-                Text(message.text).textSelection(.enabled)
+                MarkdownView(text: linkedText, identifier: "\(sessionID):\(message.seq)") { url in
+                    guard let path = FileReference.path(url: url),
+                          let index = message.attachments.firstIndex(where: { $0.path == path }) else { return }
+                    Task { await open(index) }
+                }
             }
             ForEach(Array(message.attachments.enumerated()), id: \.offset) { index, item in
                 Button {
@@ -33,6 +38,14 @@ struct UserMessageBody: View {
             if let error { Text(error).font(.caption).foregroundStyle(palette.danger) }
         }
         .sheet(item: $preview) { AttachmentPreview(attachment: $0) }
+    }
+
+    private var linkedText: String {
+        guard !message.attachments.isEmpty, message.text.contains("@") else { return message.text }
+        return FileReference.transcript(
+            message.text, attachedPaths: Set(message.attachments.map(\.path)),
+            excluding: MarkdownSource.codeRanges(in: message.text)
+        )
     }
 
     private func open(_ index: Int) async {

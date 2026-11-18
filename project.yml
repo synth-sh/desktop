@@ -10,9 +10,6 @@ packages:
   MarkdownEngine:
     url: https://github.com/synth-sh/swift-markdown-engine.git
     revision: "c991a9f5341f6672f148c24955a9e14745c75a17"
-  Textual:
-    url: https://github.com/gonzalezreal/textual.git
-    exactVersion: "0.5.0"
 
 targets:
   Synth:
@@ -35,8 +32,6 @@ targets:
         product: MarkdownEngine
       - package: MarkdownEngine
         product: MarkdownEngineCodeBlocks
-      - package: Textual
-        product: Textual
     settings:
       base:
         ARCHS: arm64
