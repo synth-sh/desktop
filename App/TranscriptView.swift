@@ -17,86 +17,74 @@ struct TranscriptView: View {
 
     @State private var followsConversation = true
     @State private var userScrolling = false
-
-    private struct Tail: Equatable {
-        let sequence: UInt64?
-        let stream: Synth.Stream?
-        let notices: [String]
-        let interactions: [RequestID]
-    }
-
-    private var tail: Tail {
-        Tail(sequence: messages.last?.seq, stream: stream, notices: notices, interactions: interactions.map(\.id))
-    }
+    @State private var position = ScrollPosition(idType: TranscriptAnchor.self)
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    if model.hasOlderMessages {
-                        Button("Load Earlier Messages") { Task { await model.loadOlder() } }
-                            .disabled(model.loadingHistory.contains(sessionID))
-                    }
-                    ForEach(messages) { message in
-                        TranscriptRow(message: message, sessionID: sessionID, model: model)
-                            .id(TranscriptAnchor.message(message.seq))
-                    }
-                    if let stream {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                if model.hasOlderMessages {
+                    Button("Load Earlier Messages") { Task { await model.loadOlder() } }
+                        .disabled(model.loadingHistory.contains(sessionID))
+                }
+                ForEach(messages.filter { ["user", "assistant", "summary"].contains($0.role) }) { message in
+                    TranscriptRow(message: message, sessionID: sessionID, model: model)
+                        .id(TranscriptAnchor.message(message.seq))
+                }
+                if let stream {
+                    VStack(alignment: .leading, spacing: 10) {
                         if !stream.thinking.isEmpty { ReasoningText(text: stream.thinking) }
                         if !stream.text.isEmpty {
                             StreamingMarkdown(text: stream.text, identifier: sessionID + ":stream")
-                                .id(stream.request)
                         }
                     }
-                    TranscriptNotices(notices: notices)
-                    ForEach(interactions) { interaction in
-                        InteractionCard(interaction: interaction, model: model)
-                    }
-                    Color.clear.frame(height: 1).id(TranscriptAnchor.tail).accessibilityHidden(true)
+                    .id(stream.request)
                 }
-                .scrollTargetLayout()
-                .frame(maxWidth: 730, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 18)
-                .frame(maxWidth: .infinity)
-            }
-            .defaultScrollAnchor(.bottom, for: .initialOffset)
-            .scrollPosition(id: $anchor, anchor: .top)
-            .onAppear {
-                if let anchor, anchor != .tail {
-                    followsConversation = false
-                    proxy.scrollTo(anchor, anchor: .top)
+                TranscriptNotices(notices: notices)
+                ForEach(interactions) { interaction in
+                    InteractionCard(interaction: interaction, model: model)
                 }
+                Color.clear.frame(height: 1).id(TranscriptAnchor.tail).accessibilityHidden(true)
             }
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentSize.height - geometry.visibleRect.maxY < 100
-            } action: { _, nearBottom in
-                if nearBottom || userScrolling { followsConversation = nearBottom }
+            .scrollTargetLayout()
+            .frame(maxWidth: 730, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity)
+        }
+        .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .defaultScrollAnchor(followsConversation ? .bottom : .top, for: .sizeChanges)
+        .scrollPosition($position)
+        .onScrollTargetVisibilityChange(idType: TranscriptAnchor.self, threshold: 0.01) { visible in
+            anchor = visible.contains(.tail) ? .tail : visible.first
+        }
+        .onAppear {
+            if let anchor, anchor != .tail {
+                followsConversation = false
+                position.scrollTo(id: anchor, anchor: .top)
             }
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, _ in
-                if followsConversation && !userScrolling { proxy.scrollTo(TranscriptAnchor.tail, anchor: .bottom) }
+        }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentSize.height - geometry.visibleRect.maxY < 100
+        } action: { _, nearBottom in
+            if nearBottom || userScrolling { followsConversation = nearBottom }
+        }
+        .onScrollPhaseChange { previous, phase, context in
+            let trackingUser = phase == .tracking || phase == .interacting || phase == .decelerating
+            userScrolling = trackingUser
+            if trackingUser || previous == .interacting || previous == .decelerating {
+                followsConversation = context.geometry.contentSize.height - context.geometry.visibleRect.maxY < 100
             }
-            .onScrollPhaseChange { previous, phase, context in
-                let trackingUser = phase == .interacting || phase == .decelerating
-                userScrolling = trackingUser
-                if trackingUser || previous == .interacting || previous == .decelerating {
-                    followsConversation = context.geometry.contentSize.height - context.geometry.visibleRect.maxY < 100
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if !followsConversation {
+                Button("Jump to Latest", systemImage: "arrow.down") {
+                    followsConversation = true
+                    position.scrollTo(edge: .bottom)
                 }
-            }
-            .onChange(of: tail) {
-                if followsConversation { proxy.scrollTo(TranscriptAnchor.tail, anchor: .bottom) }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if !followsConversation {
-                    Button("Jump to Latest", systemImage: "arrow.down") {
-                        proxy.scrollTo(TranscriptAnchor.tail, anchor: .bottom)
-                        followsConversation = true
-                    }
-                    .buttonStyle(.bordered)
-                    .labelStyle(.iconOnly)
-                    .help("Jump to Latest")
-                    .padding()
-                }
+                .buttonStyle(.bordered)
+                .labelStyle(.iconOnly)
+                .help("Jump to Latest")
+                .padding()
             }
         }
     }
@@ -123,23 +111,26 @@ private struct TranscriptRow: View {
     let model: ConversationModel
 
     var body: some View {
-        switch message.role {
-        case "user":
-            VStack(alignment: .leading, spacing: 6) {
-                Text("You").font(.caption.weight(.semibold)).foregroundStyle(palette.muted)
-                UserMessageBody(message: message, sessionID: sessionID, model: model)
+        VStack(alignment: .leading, spacing: 10) {
+            switch message.role {
+            case "user":
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("You").font(.caption.weight(.semibold)).foregroundStyle(palette.muted)
+                    UserMessageBody(message: message, sessionID: sessionID, model: model)
+                }
+                .padding(13)
+                .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
+                .frame(maxWidth: 490, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            case "assistant":
+                assistant
+            case "summary":
+                Text(message.text).font(.caption).foregroundStyle(palette.muted).textSelection(.enabled)
+            default:
+                EmptyView()
             }
-            .padding(13)
-            .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
-            .frame(maxWidth: 490, alignment: .trailing)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-        case "assistant":
-            assistant
-        case "summary":
-            Text(message.text).font(.caption).foregroundStyle(palette.muted).textSelection(.enabled)
-        default:
-            EmptyView()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private typealias BodyLoader = @MainActor () async throws -> String
