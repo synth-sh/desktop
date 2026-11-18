@@ -34,14 +34,14 @@ struct MCPConfigEditor: View {
         .frame(width: 510)
         .onAppear {
             name = serverName
-            json = Self.encode(initial ?? .object(["url": .string("https://")] ))
+            json = Self.encode(initial ?? .object(["url": .string("https://")]))
         }
     }
 
     private func save() {
         error = nil
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed.rangeOfCharacter(from: .newlines) == nil else {
+        let key = serverName.isEmpty ? name.trimmingCharacters(in: .whitespacesAndNewlines) : serverName
+        guard !key.isEmpty, key.rangeOfCharacter(from: .newlines) == nil else {
             error = "Enter a server name on one line."
             return
         }
@@ -54,7 +54,7 @@ struct MCPConfigEditor: View {
             guard command?.isEmpty == false || url != nil else {
                 throw EditorError.endpointRequired
             }
-            try saved(trimmed, .object(value))
+            try saved(key, .object(value))
             dismiss()
         } catch {
             self.error = error.localizedDescription

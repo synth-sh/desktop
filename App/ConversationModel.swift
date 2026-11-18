@@ -7,8 +7,11 @@ import SynthProtocol
 @Observable
 final class ConversationModel {
     let notifications = ConversationNotifications()
-    var settingsPage = SettingsPage.themes
+    var settingsPage = SettingsPage.modelsAndMCP
     var engineSettingsPage = EngineSettingsPage.providers
+    var customModelIDs = UserDefaults.standard.dictionary(forKey: "customModelIDs") as? [String: [String]] ?? [:] {
+        didSet { UserDefaults.standard.set(customModelIDs, forKey: "customModelIDs") }
+    }
     private(set) var project: URL?
     private(set) var sessionID: String?
     private(set) var state: SessionState?

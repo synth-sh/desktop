@@ -22,11 +22,12 @@ struct MCPSettings: View {
                 HStack {
                     Spacer()
                     Button("Add Server…") { editorName = "" }
+                        .disabled(store == nil)
                 }
                 if let toggleError { Text(toggleError).foregroundStyle(.red).textSelection(.enabled) }
             }
             Section {
-                Text("Configuration changes apply to new conversations. Connection toggles apply immediately.")
+                Text("Status reflects the current conversation. Configuration changes apply to new conversations.")
                 if let path = store?.file.path {
                     LabeledContent("Config file", value: path).textSelection(.enabled)
                 }
@@ -35,11 +36,11 @@ struct MCPSettings: View {
         .formStyle(.grouped)
         .task { await load() }
         .sheet(isPresented: Binding(get: { editorName != nil }, set: { if !$0 { editorName = nil } })) {
-            MCPConfigEditor(
-                serverName: editorName ?? "", initial: editorName.flatMap { configured[$0] }
-            ) { name, value in
-                try store?.updateMCPServers { $0[name] = value }
-                configured[name] = value
+            if let store, let editorName {
+                MCPConfigEditor(serverName: editorName, initial: configured[editorName]) { name, value in
+                    try store.saveMCPServer(name, configuration: value, isNew: editorName.isEmpty)
+                    configured[name] = value
+                }
             }
         }
         .confirmationDialog("Delete \(deleting ?? "server")?", isPresented: Binding(
@@ -67,8 +68,8 @@ struct MCPSettings: View {
                 Button("Edit") { editorName = name }.buttonStyle(.borderless)
                 Button("Delete", role: .destructive) { deleting = name }.buttonStyle(.borderless)
             }
+            statusIndicator(status?.state)
             if let status {
-                Text(statusLabel(status.state)).font(.caption).foregroundStyle(.secondary)
                 if let command = signInCommand(status) {
                     Text("Not signed in. Run this in Terminal, then start a new conversation:")
                         .font(.caption)
@@ -76,19 +77,26 @@ struct MCPSettings: View {
                 } else if !status.reason.isEmpty {
                     Text(status.reason).font(.caption).textSelection(.enabled)
                 }
-            } else {
-                Text("Starts in a new conversation.").font(.caption).foregroundStyle(.secondary)
             }
         }
     }
 
-    private func statusLabel(_ state: Synth.MCPServer.State) -> String {
+    private func statusIndicator(_ state: Synth.MCPServer.State?) -> some View {
+        let title: String
+        let color: Color
         switch state {
-        case .off: "Disabled"
-        case .connecting: "Connecting…"
-        case .connected: "Connected"
-        case .failed: "Connection failed"
+        case .off: (title, color) = ("Disabled", .secondary)
+        case .connecting: (title, color) = ("Connecting…", .orange)
+        case .connected: (title, color) = ("Connected", .green)
+        case .failed: (title, color) = ("Connection failed", .red)
+        case nil: (title, color) = ("Starts in a new conversation.", .secondary)
         }
+        return Label {
+            Text(title).foregroundStyle(.secondary)
+        } icon: {
+            Circle().fill(color).frame(width: 7, height: 7).accessibilityHidden(true)
+        }
+        .font(.caption)
     }
 
     private func signInCommand(_ server: Synth.MCPServer) -> String? {
@@ -109,9 +117,9 @@ struct MCPSettings: View {
     }
 
     private func remove() {
-        guard let deleting else { return }
+        guard let deleting, let store else { return }
         do {
-            try store?.updateMCPServers { $0.removeValue(forKey: deleting) }
+            try store.updateMCPServers { $0.removeValue(forKey: deleting) }
             configured.removeValue(forKey: deleting)
             self.deleting = nil
             toggleError = nil

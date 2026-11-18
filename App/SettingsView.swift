@@ -1,7 +1,7 @@
 import SwiftUI
 import UserNotifications
 
-enum SettingsPage: Hashable { case themes, notifications, modelsAndMCP }
+enum SettingsPage: Hashable { case modelsAndMCP, themes, notifications }
 
 struct SettingsView: View {
     @Binding var theme: String
@@ -9,14 +9,14 @@ struct SettingsView: View {
 
     var body: some View {
         TabView(selection: $model.settingsPage) {
+            Tab("Models & MCP", systemImage: "slider.horizontal.3", value: .modelsAndMCP) {
+                EngineSettings(model: model)
+            }
             Tab("Themes", systemImage: "paintpalette", value: .themes) {
                 ThemePicker(selection: $theme)
             }
             Tab("Notifications", systemImage: "bell", value: .notifications) {
                 NotificationSettings(notifications: model.notifications)
-            }
-            Tab("Models & MCP", systemImage: "slider.horizontal.3", value: .modelsAndMCP) {
-                EngineSettings(model: model)
             }
         }
         .frame(width: model.settingsPage == .modelsAndMCP ? 660 : 536,

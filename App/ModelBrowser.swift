@@ -12,6 +12,7 @@ struct ModelBrowser: View {
     @State private var highlight: String?
     @State private var effort: String?
     @State private var applyError: String?
+    @State private var addingModel = false
 
     var body: some View {
         let groups = groups
@@ -29,6 +30,11 @@ struct ModelBrowser: View {
                     }
                 )
                 .frame(height: 22)
+                if let settingsProvider, settingsProvider.allowsManualModel {
+                    Button("Add Custom Model…", systemImage: "plus") { addingModel = true }
+                        .labelStyle(.iconOnly)
+                        .help("Add a custom model ID")
+                }
                 Button("Refresh Models", systemImage: "arrow.clockwise") {
                     Task { await model.fetchModels() }
                 }
@@ -61,10 +67,36 @@ struct ModelBrowser: View {
         .onAppear {
             if !model.loadingModels { Task { await model.fetchModels() } }
         }
+        .sheet(isPresented: $addingModel) {
+            if let settingsProvider {
+                CustomModelEditor(provider: settingsProvider, existingIDs: existingModelIDs) { name in
+                    model.customModelIDs[settingsProvider.rawValue, default: []].append(name)
+                    query = name
+                }
+            }
+        }
     }
 
     private var search: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var canApply: Bool { model.canConfigure && model.state?.status?.signIn == nil }
+    private var settingsProvider: ProviderKind? {
+        guard readOnly, let providerID else { return nil }
+        return ProviderKind(rawValue: providerID)
+    }
+
+    private var existingModelIDs: Set<String> {
+        guard let providerID else { return [] }
+        let offered = (model.state?.models?.offered ?? []).filter { $0.providerID == providerID }
+        return Set(offered.map(\.name)).union(model.customModelIDs[providerID] ?? [])
+    }
+
+    private var customModels: [Synth.Model] {
+        model.customModelIDs.flatMap { providerID, names -> [Synth.Model] in
+            guard let provider = ProviderKind(rawValue: providerID), provider.allowsManualModel else { return [] }
+            return names.sorted().map { Synth.Model(name: $0, provider: provider.title, providerID: providerID) }
+        }
+    }
+
     private var manualProvider: String? {
         guard let active = model.activeProviderID, providerID == nil || providerID == active,
               ProviderKind(rawValue: active)?.allowsManualModel == true else { return nil }
@@ -73,7 +105,7 @@ struct ModelBrowser: View {
 
     private var searchPlaceholder: String {
         if manualProvider != nil {
-            return providerID == nil ? "Search models or providers, or enter an ID" : "Search or enter model ID"
+            return "Search or enter a model ID"
         }
         return providerID == nil ? "Search models or providers" : "Search models"
     }
@@ -85,6 +117,7 @@ struct ModelBrowser: View {
            !offers.contains(where: { $0.providerID == status.providerID && $0.name == status.model }) {
             offers.insert(.init(name: status.model, provider: status.provider, providerID: status.providerID), at: 0)
         }
+        offers.append(contentsOf: customModels)
         var seen: Set<String> = []
         let matching = offers.filter { offer in
             (providerID == nil || offer.providerID == providerID) && seen.insert(offer.id).inserted &&
@@ -113,8 +146,10 @@ struct ModelBrowser: View {
         }
         return groups
     }
+}
 
-    private func results(_ groups: [ModelGroup], selected: ModelChoice?) -> some View {
+private extension ModelBrowser {
+    func results(_ groups: [ModelGroup], selected: ModelChoice?) -> some View {
         ScrollViewReader { reader in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 3) {
@@ -131,49 +166,65 @@ struct ModelBrowser: View {
                     }
                 }
             }
-            .frame(minHeight: 55, maxHeight: providerID == nil ? 270 : .infinity)
+            .frame(minHeight: 55, maxHeight: providerID == nil ? 350 : .infinity)
             .onChange(of: selected?.id, initial: true) {
                 if let selected { reader.scrollTo(selected.id) }
             }
         }
     }
 
-    private func row(_ option: ModelChoice, highlighted: Bool) -> some View {
-        Button {
-            guard !readOnly else { return }
-            highlight = option.id
-            applyError = nil
-        } label: {
+    @ViewBuilder
+    func row(_ option: ModelChoice, highlighted: Bool) -> some View {
+        if readOnly {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(option.manual ? "Use ‘\(option.model.name)’" : option.model.name)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if providerID == nil {
-                        Text(option.model.provider).font(.caption).foregroundStyle(.secondary)
+                rowLabel(option)
+                let provider = option.model.providerID
+                if model.customModelIDs[provider]?.contains(option.model.name) == true {
+                    Button("Remove Custom Model", systemImage: "minus.circle") {
+                        model.customModelIDs[provider]?.removeAll { $0 == option.model.name }
                     }
-                }
-                Spacer()
-                if isCurrent(option) {
-                    Image(systemName: "checkmark")
-                        .accessibilityLabel("Current model")
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .help("Remove \(option.model.name) from custom models")
                 }
             }
             .padding(.vertical, 5)
             .padding(.horizontal, 8)
-            .contentShape(.rect)
-            .background(highlighted ? highlightColor : Color.clear, in: .rect(cornerRadius: 5))
+        } else {
+            Button {
+                highlight = option.id
+                applyError = nil
+            } label: {
+                rowLabel(option)
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 8)
+                    .contentShape(.rect)
+                    .background(highlighted ? palette.alternateSurface : Color.clear, in: .rect(cornerRadius: 5))
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(highlighted ? .isSelected : [])
+            .disabled(model.isUpdatingConfiguration)
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(highlighted ? .isSelected : [])
-        .disabled(readOnly || model.isUpdatingConfiguration)
     }
 
-    private var highlightColor: Color {
-        providerID == nil ? palette.alternateSurface : Color.accentColor.opacity(0.16)
+    func rowLabel(_ option: ModelChoice) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(option.manual ? "Use ‘\(option.model.name)’" : option.model.name)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if providerID == nil {
+                    Text(option.model.provider).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if isCurrent(option) {
+                Image(systemName: "checkmark").accessibilityLabel("Current model")
+            }
+        }
     }
 
-    private func selectionControls(_ selected: ModelChoice) -> some View {
+    func selectionControls(_ selected: ModelChoice) -> some View {
         let levels = isCurrent(selected) ? (model.state?.status?.efforts ?? []) : selected.model.efforts
         let remembered = isCurrent(selected) ? (model.state?.status?.effort ?? "") : selected.model.effort
         let current = isCurrent(selected)
@@ -197,18 +248,18 @@ struct ModelBrowser: View {
         .disabled(!canApply)
     }
 
-    private func isCurrent(_ option: ModelChoice) -> Bool {
+    func isCurrent(_ option: ModelChoice) -> Bool {
         model.activeProviderID == option.model.providerID && model.state?.status?.model == option.model.name
     }
 
-    private func move(_ offset: Int, in choices: [ModelChoice], from selected: ModelChoice?) {
+    func move(_ offset: Int, in choices: [ModelChoice], from selected: ModelChoice?) {
         guard !model.isUpdatingConfiguration,
               let index = choices.firstIndex(where: { $0.id == selected?.id }) else { return }
         highlight = choices[min(max(index + offset, 0), choices.count - 1)].id
         applyError = nil
     }
 
-    private func apply(_ selected: ModelChoice?, dismiss: Bool = true) {
+    func apply(_ selected: ModelChoice?, dismiss: Bool = true) {
         guard canApply, let selected, let session = model.sessionID else { return }
         let current = isCurrent(selected)
         let levels = current ? (model.state?.status?.efforts ?? []) : selected.model.efforts
@@ -234,6 +285,49 @@ struct ModelBrowser: View {
                 applyError = error.localizedDescription
             }
         }
+    }
+}
+
+private struct CustomModelEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    let provider: ProviderKind
+    let existingIDs: Set<String>
+    let save: (String) -> Void
+    @State private var modelID = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add Custom Model").font(.title2)
+            Text("Enter the model ID used by \(provider.title).").foregroundStyle(.secondary)
+            TextField("Model ID", text: $modelID)
+                .onChange(of: modelID) { error = nil }
+                .onSubmit(add)
+            if let error { Text(error).foregroundStyle(.red) }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                Button("Add Model", action: add)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 380)
+    }
+
+    private func add() {
+        let name = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name.rangeOfCharacter(from: .controlCharacters) == nil else {
+            error = "Enter a model ID on one line."
+            return
+        }
+        guard !existingIDs.contains(name) else {
+            error = "This provider already lists that model ID."
+            return
+        }
+        save(name)
+        dismiss()
     }
 }
 

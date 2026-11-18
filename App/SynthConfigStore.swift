@@ -33,6 +33,13 @@ struct SynthConfigStore: Sendable {
         return servers
     }
 
+    func saveMCPServer(_ name: String, configuration: JSONValue, isNew: Bool) throws {
+        try updateMCPServers { servers in
+            if isNew, servers[name] != nil { throw Failure.duplicateMCPServer(name) }
+            servers[name] = configuration
+        }
+    }
+
     func updateMCPServers(_ update: (inout [String: JSONValue]) throws -> Void) throws {
         try self.update("mcp") { value in
             var servers: [String: JSONValue] = [:]
@@ -69,8 +76,13 @@ struct SynthConfigStore: Sendable {
     }
 
     enum Failure: LocalizedError {
-        case invalidRoot
+        case invalidRoot, duplicateMCPServer(String)
 
-        var errorDescription: String? { "Synth config.json must contain a JSON object." }
+        var errorDescription: String? {
+            switch self {
+            case .invalidRoot: "Synth config.json must contain a JSON object."
+            case .duplicateMCPServer(let name): "An MCP server named “\(name)” already exists."
+            }
+        }
     }
 }

@@ -29,6 +29,8 @@ are in flight.
 | `_synth/models` | `sessionId`. Returns cached offers, project recents, and pending provider lookups. The engine sends `_synth/models_updated` as lookups finish. |
 | `_synth/providers` | `sessionId`. Returns provider IDs, hosts, connection state, and the active provider. |
 | `_synth/connect_provider` | `sessionId`, provider ID, host, and optional API key. Connects or starts OAuth sign-in. |
+| `_synth/cancel_sign_in` | `sessionId`. Cancels the provider sign-in in progress. |
+| `_synth/sign_out` | `sessionId`. Signs out of the active OAuth provider. |
 | `_synth/toggle_mcp` | `sessionId` and server name. Enables or disables a configured MCP server in the running session. |
 | `$/cancel_request` | Notification with `requestId`. Withdraws an individual request. Withdrawing a prompt request leaves the turn running. |
 
@@ -53,7 +55,9 @@ by the engine. `_synth/appended` and `_synth/updated` carry a whole message
 identified by `seq` within its session. `_synth/stream` adds text and reasoning
 to a request number. Show the stream when that number matches the latest
 `_synth/status` request. A finalized assistant message supersedes its stream.
-`_synth/notice` carries a user-visible message. Every event names its session.
+`_synth/notice` carries a user-visible message. The `mcp` list in the status
+reports each loaded server as `off`, `connecting`, `connected`, or `failed`,
+with a reason when available. Every event names its session.
 The engine can encode text payloads containing invalid UTF-8 as arrays of byte
 values. The desktop client displays those payloads with replacement characters
 where needed. The original bytes stay in the engine's data.

@@ -58,14 +58,18 @@ into your draft. The composer keeps each conversation's draft and attachments
 separate. Conversation messages use the same Markdown styles as the composer.
 Select a linked file in a sent message to see the contents that went to the agent.
 
-Choose **Synth > Settings** (⌘,) to browse the bundled themes.
+Choose **Synth > Settings > Themes** to browse the bundled themes.
 Selecting a theme updates the conversation window immediately and saves your
 choice for the next launch.
 
-Use **Synth > Settings > Models & MCP** to connect providers and add, edit,
-or remove MCP server definitions. Model and reasoning selection remains in
-the conversation's model picker. MCP definition changes apply to new
-conversations; enabling and disabling a loaded server applies immediately.
+Use **Synth > Settings > Models & MCP** (⌘,) to connect providers and manage
+MCP servers. Use the plus button next to model search to save an unlisted
+model ID for a supported provider. Saved IDs appear in the conversation's
+model picker alongside the provider catalog.
+
+The **MCP Servers** tab shows each server's connection status in the current
+conversation. Definition changes apply to new conversations. Enabling or
+disabling a loaded server applies immediately.
 
 Open **Synth > Settings > Notifications** to control alerts for input
 requests and turn outcomes, and choose where sounds play. Select

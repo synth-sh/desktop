@@ -261,6 +261,9 @@ struct ConversationView: View {
 extension ConversationView {
     private var composer: some View {
         VStack(alignment: .leading, spacing: 4) {
+            if composerFocused && composerController.showsCompletions {
+                ComposerCompletions(model: model, controller: composerController)
+            }
             if !model.composerDraft.attachments.isEmpty {
                 ComposerAttachmentStrip(model: model, controller: composerController)
             }
