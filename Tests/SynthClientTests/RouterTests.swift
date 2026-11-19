@@ -69,6 +69,55 @@ private func turn(_ text: String, session: String, client: SynthClient) -> Task<
     .enabled(if: ProcessInfo.processInfo.environment["SYNTH_TEST_ENGINE"] != nil, "Run the fake provider harness"),
     .timeLimit(.minutes(1))
 )
+func providerChangesRefreshModelsAndKeepTheEffectiveEndpoint() async throws {
+    let env = ProcessInfo.processInfo.environment
+    let engine = try #require(env["SYNTH_TEST_ENGINE"])
+    let endpoint = try #require(env["SYNTH_TEST_PROVIDER"])
+    let fixture = try Fixture(engine: engine, provider: endpoint)
+    let client = fixture.client()
+    do {
+        try await checkProviderChanges(client, cwd: fixture.first.path, endpoint: endpoint)
+    } catch {
+        await client.disconnect()
+        try? FileManager.default.removeItem(at: fixture.root)
+        throw error
+    }
+    await client.disconnect()
+    try FileManager.default.removeItem(at: fixture.root)
+}
+
+private func checkProviderChanges(_ client: SynthClient, cwd: String, endpoint: String) async throws {
+    _ = try await client.connect()
+    let session = try #require(try await client.newSession(cwd: cwd).sessionId)
+    let provider = "openai-compat"
+    #expect(try await client.providers(in: session).first { $0.id == provider }?.host == endpoint)
+    await #expect(throws: RPCError.self) {
+        try await client.setModel("gpt-custom", provider: "openai", in: session)
+    }
+    #expect(try await client.providers(in: session).first(where: \.active)?.id == provider)
+    try await client.connectProvider(provider, key: "fixture-rotated-key", in: session)
+    #expect(try await client.providers(in: session).first { $0.id == provider }?.host == endpoint)
+    try await expectProviderModels(["gpt-fixture-key"], provider: provider, client: client, session: session)
+
+    let endpointURL = try #require(URL(string: endpoint))
+    let alternate = endpointURL.deletingLastPathComponent().appending(path: "alternate/v1").absoluteString
+    try await client.connectProvider(provider, host: alternate, key: nil, in: session)
+    try await expectProviderModels(["gpt-fixture-other-endpoint"], provider: provider, client: client, session: session)
+}
+
+private func expectProviderModels(
+    _ expected: [String], provider: String, client: SynthClient, session: String, line: Int = #line
+) async throws {
+    _ = try await wait(line: line) {
+        let models = await client.sessions[session]?.models?.offered.filter { $0.providerID == provider }.map(\.name)
+        return models == expected ? true : nil
+    }
+}
+
+@Test(
+    .enabled(if: ProcessInfo.processInfo.environment["SYNTH_TEST_ENGINE"] != nil, "Run the fake provider harness"),
+    .timeLimit(.minutes(1))
+)
 func twoSessionsThroughRealRouter() async throws {
     let env = ProcessInfo.processInfo.environment
     let engine = try #require(env["SYNTH_TEST_ENGINE"])

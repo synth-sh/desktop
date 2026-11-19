@@ -13,6 +13,7 @@ struct ModelBrowser: View {
     @State private var effort: String?
     @State private var applyError: String?
     @State private var addingModel = false
+    @State private var connectedProviders: Set<String> = []
 
     var body: some View {
         let groups = groups
@@ -64,8 +65,9 @@ struct ModelBrowser: View {
             applyError = nil
         }
         .onChange(of: selected?.id) { effort = nil }
-        .onAppear {
-            if !model.loadingModels { Task { await model.fetchModels() } }
+        .task(id: model.activeProviderID) {
+            if !readOnly { await loadConnectedProviders() }
+            if !model.loadingModels { await model.fetchModels() }
         }
         .sheet(isPresented: $addingModel) {
             if let settingsProvider {
@@ -93,6 +95,8 @@ struct ModelBrowser: View {
     private var customModels: [Synth.Model] {
         model.customModelIDs.flatMap { providerID, names -> [Synth.Model] in
             guard let provider = ProviderKind(rawValue: providerID), provider.allowsManualModel else { return [] }
+            guard readOnly || provider.authentication != .requiredKey || providerID == model.activeProviderID ||
+                  connectedProviders.contains(providerID) else { return [] }
             return names.sorted().map { Synth.Model(name: $0, provider: provider.title, providerID: providerID) }
         }
     }
@@ -149,6 +153,17 @@ struct ModelBrowser: View {
 }
 
 private extension ModelBrowser {
+    func loadConnectedProviders() async {
+        guard let session = model.sessionID, let client = model.client else { return }
+        do {
+            let providers = try await client.providers(in: session)
+            guard !Task.isCancelled, model.sessionID == session, model.client === client else { return }
+            connectedProviders = Set(providers.filter(\.connected).map(\.id))
+        } catch where !Task.isCancelled && model.sessionID == session && model.client === client {
+            connectedProviders = []
+        } catch {}
+    }
+
     func results(_ groups: [ModelGroup], selected: ModelChoice?) -> some View {
         ScrollViewReader { reader in
             ScrollView {

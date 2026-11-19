@@ -22,9 +22,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/v1/models":
-            self.send_body(b'{"data":[{"id":"gpt-fixture"},{"id":"gpt-fixture-alt"}]}', "application/json")
+            models = (
+                ["gpt-fixture-key"]
+                if self.headers.get("Authorization") == "Bearer fixture-rotated-key"
+                else ["gpt-fixture", "gpt-fixture-alt"]
+            )
+        elif self.path == "/alternate/v1/models":
+            models = ["gpt-fixture-other-endpoint"]
         else:
             self.send_error(404)
+            return
+        self.send_body(json.dumps({"data": [{"id": model} for model in models]}).encode(), "application/json")
 
     def do_POST(self):
         if self.path != "/v1/chat/completions":

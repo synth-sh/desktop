@@ -20,7 +20,7 @@ struct MCPConfigEditor: View {
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 210)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
-            Text("Enter a server object with a command or URL. Other Synth config remains unchanged.")
+            Text("Use a command for a local process or a URL for an HTTP server.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
@@ -34,7 +34,7 @@ struct MCPConfigEditor: View {
         .frame(width: 510)
         .onAppear {
             name = serverName
-            json = Self.encode(initial ?? .object(["url": .string("https://")]))
+            json = Self.encode(initial ?? .object([:]))
         }
     }
 
@@ -50,8 +50,10 @@ struct MCPConfigEditor: View {
                 throw EditorError.objectRequired
             }
             let command = value["command"].flatMap(Self.string)
-            let url = value["url"].flatMap(Self.validURL)
-            guard command?.isEmpty == false || url != nil else {
+            if let url = value["url"].flatMap(Self.string) {
+                guard Self.isValidHTTPURL(url) else { throw EditorError.invalidURL }
+                guard command == nil else { throw EditorError.ambiguousTransport }
+            } else if command?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
                 throw EditorError.endpointRequired
             }
             try saved(key, .object(value))
@@ -72,19 +74,21 @@ struct MCPConfigEditor: View {
         return string
     }
 
-    private static func validURL(_ value: JSONValue) -> URL? {
-        guard let string = string(value), let url = URL(string: string),
-              ["http", "https"].contains(url.scheme?.lowercased()), url.host != nil else { return nil }
-        return url
+    private static func isValidHTTPURL(_ value: String) -> Bool {
+        guard let url = URL(string: value, encodingInvalidCharacters: false),
+              let scheme = url.scheme?.lowercased(), let host = url.host else { return false }
+        return ["http", "https"].contains(scheme) && !host.isEmpty
     }
 
     enum EditorError: LocalizedError {
-        case objectRequired, endpointRequired
+        case objectRequired, endpointRequired, invalidURL, ambiguousTransport
 
         var errorDescription: String? {
             switch self {
             case .objectRequired: "The server configuration must be a JSON object."
             case .endpointRequired: "Provide a non-empty command or an HTTP(S) URL."
+            case .invalidURL: "Enter a valid HTTP(S) URL or remove the URL field to use a command."
+            case .ambiguousTransport: "Provide either a command or a URL."
             }
         }
     }

@@ -27,7 +27,14 @@ struct MCPSettings: View {
                 if let toggleError { Text(toggleError).foregroundStyle(.red).textSelection(.enabled) }
             }
             Section {
-                Text("Status reflects the current conversation. Configuration changes apply to new conversations.")
+                LabeledContent {
+                    Button("Restart Engine") { Task { await model.restartEngine() } }
+                        .disabled(!model.canRestartEngine)
+                } label: {
+                    Text(model.pendingMCPChanges.isEmpty
+                         ? "Restart the engine to reload configuration for open conversations."
+                         : "MCP configuration changed. Restart the engine to update open conversations.")
+                }
                 if let path = store?.file.path {
                     LabeledContent("Config file", value: path).textSelection(.enabled)
                 }
@@ -39,6 +46,7 @@ struct MCPSettings: View {
             if let store, let editorName {
                 MCPConfigEditor(serverName: editorName, initial: configured[editorName]) { name, value in
                     try store.saveMCPServer(name, configuration: value, isNew: editorName.isEmpty)
+                    if configured[name] != value { model.pendingMCPChanges.insert(name) }
                     configured[name] = value
                 }
             }
@@ -53,9 +61,11 @@ struct MCPSettings: View {
 
     private func configuredRow(_ name: String) -> some View {
         let status = model.state?.status?.mcp?.first { $0.name == name }
+        let pending = model.pendingMCPChanges.contains(name)
+        let disabledInConfig = isDisabledInConfig(configured[name])
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                if let status {
+                if let status, !pending, !disabledInConfig {
                     Toggle(isOn: Binding(get: { status.isEnabled }, set: { toggle(status, enabled: $0) })) {
                         Text(name)
                     }
@@ -68,7 +78,14 @@ struct MCPSettings: View {
                 Button("Edit") { editorName = name }.buttonStyle(.borderless)
                 Button("Delete", role: .destructive) { deleting = name }.buttonStyle(.borderless)
             }
-            statusIndicator(status?.state)
+            if pending {
+                Text("Restart the engine to apply this change.").font(.caption).foregroundStyle(.secondary)
+            } else if disabledInConfig {
+                Text("Disabled in configuration. Edit the server to enable it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                statusIndicator(status?.state)
+            }
             if let status {
                 if let command = signInCommand(status) {
                     Text("Not signed in. Run this in Terminal, then start a new conversation:")
@@ -81,6 +98,11 @@ struct MCPSettings: View {
         }
     }
 
+    private func isDisabledInConfig(_ configuration: JSONValue?) -> Bool {
+        guard case .object(let fields) = configuration else { return false }
+        return fields["enabled"] == .bool(false)
+    }
+
     private func statusIndicator(_ state: Synth.MCPServer.State?) -> some View {
         let title: String
         let color: Color
@@ -89,7 +111,7 @@ struct MCPSettings: View {
         case .connecting: (title, color) = ("Connecting…", .orange)
         case .connected: (title, color) = ("Connected", .green)
         case .failed: (title, color) = ("Connection failed", .red)
-        case nil: (title, color) = ("Starts in a new conversation.", .secondary)
+        case nil: (title, color) = ("Not loaded in this conversation.", .secondary)
         }
         return Label {
             Text(title).foregroundStyle(.secondary)
@@ -121,6 +143,7 @@ struct MCPSettings: View {
         do {
             try store.updateMCPServers { $0.removeValue(forKey: deleting) }
             configured.removeValue(forKey: deleting)
+            model.pendingMCPChanges.insert(deleting)
             self.deleting = nil
             toggleError = nil
         } catch {

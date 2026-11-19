@@ -68,8 +68,12 @@ model ID for a supported provider. Saved IDs appear in the conversation's
 model picker alongside the provider catalog.
 
 The **MCP Servers** tab shows each server's connection status in the current
-conversation. Definition changes apply to new conversations. Enabling or
-disabling a loaded server applies immediately.
+conversation. Use **Restart Engine** to reload definition changes for open
+conversations without quitting Desktop. Finish active turns before restarting.
+The connection switch applies immediately to a loaded server. To enable a
+server disabled in its definition, edit the definition and restart the engine.
+Conversations shared with another client reload their configuration when their
+host restarts.
 
 Open **Synth > Settings > Notifications** to control alerts for input
 requests and turn outcomes, and choose where sounds play. Select

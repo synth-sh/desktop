@@ -28,7 +28,7 @@ are in flight.
 | `_synth/load_image` | `sessionId`, message `seq`, and zero-based `index`. Returns one stored image as a base64 string. |
 | `_synth/models` | `sessionId`. Returns cached offers, project recents, and pending provider lookups. The engine sends `_synth/models_updated` as lookups finish. |
 | `_synth/providers` | `sessionId`. Returns provider IDs, hosts, connection state, and the active provider. |
-| `_synth/connect_provider` | `sessionId`, provider ID, host, and optional API key. Connects or starts OAuth sign-in. |
+| `_synth/connect_provider` | `sessionId`, provider ID, optional host, and optional API key. Omit the host to keep the current or saved endpoint. Successful connections refresh model discovery. |
 | `_synth/cancel_sign_in` | `sessionId`. Cancels the provider sign-in in progress. |
 | `_synth/sign_out` | `sessionId`. Signs out of the active OAuth provider. |
 | `_synth/toggle_mcp` | `sessionId` and server name. Enables or disables a configured MCP server in the running session. |

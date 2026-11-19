@@ -211,8 +211,8 @@ private struct ProviderDetails: View {
 
     private func connect(_ kind: ProviderKind) {
         guard let session = model.sessionID else { return }
-        let host = (endpoint ?? provider.host).trimmingCharacters(in: .whitespacesAndNewlines)
-        if kind.hasEditableHost, !Self.isEndpoint(host) {
+        let host = endpoint?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if kind.hasEditableHost, let host, !Self.isEndpoint(host) {
             connectionError = "Enter an HTTP or HTTPS endpoint without embedded credentials."
             return
         }

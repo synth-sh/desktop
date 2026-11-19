@@ -9,10 +9,10 @@ extension Synth {
     public struct ConnectProvider: Encodable, Sendable {
         public let sessionId: String
         public let provider: String
-        public let host: String
+        public let host: String?
         public let key: String?
 
-        public init(sessionID: String, provider: String, host: String, key: String?) {
+        public init(sessionID: String, provider: String, host: String?, key: String?) {
             sessionId = sessionID
             self.provider = provider
             self.host = host

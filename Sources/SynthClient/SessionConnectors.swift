@@ -6,7 +6,9 @@ extension SynthClient {
         return try await call("_synth/providers", ACP.SessionRef(sessionID), as: [Synth.Provider].self)
     }
 
-    public func connectProvider(_ provider: String, host: String, key: String?, in sessionID: String) async throws {
+    public func connectProvider(
+        _ provider: String, host: String? = nil, key: String?, in sessionID: String
+    ) async throws {
         try requireConnected()
         let request = Synth.ConnectProvider(sessionID: sessionID, provider: provider, host: host, key: key)
         _ = try await call("_synth/connect_provider", request, as: ACP.Empty.self)

@@ -223,8 +223,8 @@ struct ConversationView: View {
             Image(systemName: "exclamationmark.circle").foregroundStyle(palette.accent)
             Text(model.error ?? "Connect a provider to start chatting.").textSelection(.enabled)
             Spacer()
-            Button("Retry") { Task { await model.retryProvider() } }
-                .disabled(!model.canSwitch || model.anyBusy)
+            Button("Retry") { Task { await model.restartEngine() } }
+                .disabled(!model.canRestartEngine)
             Button("Manage Providers…") {
                 model.settingsPage = .modelsAndMCP
                 model.engineSettingsPage = .providers

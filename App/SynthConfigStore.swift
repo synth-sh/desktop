@@ -55,17 +55,24 @@ struct SynthConfigStore: Sendable {
     }
 
     private func write(_ object: [String: JSONValue]) throws {
-        let manager = FileManager.default
-        try manager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        var data = try encoder.encode(JSONValue.object(object))
-        data.append(0x0A)
+        let value = JSONValue.object(object)
+        var data = try encoder.encode(value)
+        let limit = 64 * 1024
+        if data.count + 1 >= limit {
+            encoder.outputFormatting.remove(.prettyPrinted)
+            data = try encoder.encode(value)
+        }
+        if data.count + 1 < limit { data.append(0x0A) }
+        guard data.count < limit else { throw Failure.configTooLarge }
+        let manager = FileManager.default
+        try manager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         let temporary = file.appendingPathExtension("tmp-\(UUID().uuidString)")
         do {
             try data.write(to: temporary, options: .atomic)
             if manager.fileExists(atPath: file.path) {
-                try manager.replaceItemAt(file, withItemAt: temporary)
+                _ = try manager.replaceItemAt(file, withItemAt: temporary)
             } else {
                 try manager.moveItem(at: temporary, to: file)
             }
@@ -76,12 +83,13 @@ struct SynthConfigStore: Sendable {
     }
 
     enum Failure: LocalizedError {
-        case invalidRoot, duplicateMCPServer(String)
+        case invalidRoot, duplicateMCPServer(String), configTooLarge
 
         var errorDescription: String? {
             switch self {
             case .invalidRoot: "Synth config.json must contain a JSON object."
             case .duplicateMCPServer(let name): "An MCP server named “\(name)” already exists."
+            case .configTooLarge: "Synth config.json must be smaller than 64 KiB."
             }
         }
     }
