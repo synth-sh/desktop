@@ -14,7 +14,7 @@ func providerChangesRefreshModelsAndKeepTheEffectiveEndpoint() async throws {
     let fixture = try RouterFixture(engine: engine, provider: endpoint)
     let client = fixture.client()
     do {
-        try await checkProviderChanges(client, cwd: fixture.first.path, endpoint: endpoint)
+        try await checkProviderChanges(client, fixture: fixture, endpoint: endpoint)
     } catch {
         await client.disconnect()
         try? FileManager.default.removeItem(at: fixture.root)
@@ -24,9 +24,14 @@ func providerChangesRefreshModelsAndKeepTheEffectiveEndpoint() async throws {
     try FileManager.default.removeItem(at: fixture.root)
 }
 
-private func checkProviderChanges(_ client: SynthClient, cwd: String, endpoint: String) async throws {
+private func checkProviderChanges(_ client: SynthClient, fixture: RouterFixture, endpoint: String) async throws {
     _ = try await client.connect()
-    let session = try #require(try await client.newSession(cwd: cwd).sessionId)
+    let session = try #require(try await client.newSession(cwd: fixture.first.path).sessionId)
+    let other = try #require(try await client.newSession(cwd: fixture.second.path).sessionId)
+    let otherModel: String = try await wait {
+        guard let model = await client.sessions[other]?.status?.model, !model.isEmpty else { return nil }
+        return model
+    }
     let provider = "openai-compat"
     #expect(try await client.providers(in: session).first { $0.id == provider }?.host == endpoint)
     await #expect(throws: RPCError.self) {
@@ -49,6 +54,10 @@ private func checkProviderChanges(_ client: SynthClient, cwd: String, endpoint: 
     )
     #expect(await client.sessions[session]?.status?.model == before)
     try await verifyModelSwitchWithLongHistory(client, session: session, provider: provider)
+
+    #expect(try await client.providers(in: other).first(where: \.active)?.host == endpoint)
+    #expect(await client.sessions[other]?.status?.model == otherModel)
+    #expect(try await client.prompt("still on the original backend", in: other).stopReason == "end_turn")
 }
 
 private func verifySettingsConnection(
