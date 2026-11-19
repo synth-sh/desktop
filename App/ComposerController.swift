@@ -213,9 +213,7 @@ final class ComposerController {
         switch action {
         case .new:
             Task { await model.open(in: model.project) }
-        case .model:
-            model.showModelPicker = true
-            if !model.hasRequestedModels { Task { await model.fetchModels() } }
+        case .model: model.showModelPicker = true
         case .mode: model.showModePicker = true
         case .stop: Task { await model.stop() }
         case .compact: Task { await model.compact() }

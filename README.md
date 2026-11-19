@@ -22,8 +22,8 @@ network access for the engine and Swift packages. To use a compatible engine
 you built yourself, set `SYNTH_ENGINE` to its absolute path.
 
 Open `DerivedData/Build/Products/Release/Synth.app` in Finder. The app uses
-the same provider configuration and credentials as the terminal client. Run
-`synth` in Terminal first if you need to configure a provider.
+the same provider configuration and credentials as the terminal client.
+Manage provider credentials and MCP servers under **Settings > Models & MCP**.
 
 To build in Xcode, run `xcodegen` before opening `Synth.xcodeproj`. A
 successful run of the build script supplies the default engine at
@@ -58,9 +58,26 @@ into your draft. The composer keeps each conversation's draft and attachments
 separate. Conversation messages use the same Markdown styles as the composer.
 Select a linked file in a sent message to see the contents that went to the agent.
 
-Choose **Synth > Settings** (⌘,) to browse the bundled themes.
+Choose **Synth > Settings > Themes** to browse the bundled themes.
 Selecting a theme updates the conversation window immediately and saves your
 choice for the next launch.
+
+Use **Synth > Settings > Models & MCP** (⌘,) to connect providers and manage
+MCP servers. Use the plus button next to model search to save an unlisted
+model ID for a supported provider. Saved IDs appear in the conversation's
+model picker alongside the provider catalog. Click a model in the
+conversation picker to switch to it. Saving another provider in Settings
+makes its models available in the picker.
+
+The **MCP Servers** tab has forms for standard I/O and HTTP servers. Use the
+JSON button in the editor for direct configuration. The list shows each
+server's connection status in the current conversation. Use **Restart Engine**
+to reload definitions for open conversations without quitting Desktop. Finish
+active turns before restarting.
+The connection switch applies immediately to a loaded server. To enable a
+server disabled in its definition, edit the definition and restart the engine.
+Conversations shared with another client reload their configuration when their
+host restarts.
 
 Open **Synth > Settings > Notifications** to control alerts for input
 requests and turn outcomes, and choose where sounds play. Select

@@ -8,7 +8,7 @@ private struct TimedOut: Error, CustomStringConvertible {
     var description: String { "Timed out waiting for RouterTests.swift:\(line)" }
 }
 
-private struct Fixture {
+struct RouterFixture {
     let root: URL
     let engine: URL
     let environment: [String: String]
@@ -73,7 +73,7 @@ func twoSessionsThroughRealRouter() async throws {
     let env = ProcessInfo.processInfo.environment
     let engine = try #require(env["SYNTH_TEST_ENGINE"])
     let provider = try #require(env["SYNTH_TEST_PROVIDER"])
-    let fixture = try Fixture(engine: engine, provider: provider)
+    let fixture = try RouterFixture(engine: engine, provider: provider)
     let client = fixture.client()
     let guest = fixture.client()
     do {
@@ -89,7 +89,7 @@ func twoSessionsThroughRealRouter() async throws {
     try FileManager.default.removeItem(at: fixture.root)
 }
 
-private func runScenario(fixture: Fixture, client: SynthClient, guest: SynthClient) async throws {
+private func runScenario(fixture: RouterFixture, client: SynthClient, guest: SynthClient) async throws {
     let initReply = try await client.connect()
     #expect(initReply.metadata?.synth?.protocol == ACP.synthVersion)
     let first = try #require(try await client.newSession(cwd: fixture.first.path).sessionId)
@@ -140,7 +140,7 @@ private func runScenario(fixture: Fixture, client: SynthClient, guest: SynthClie
     try await verifyDeletion(fixture, client: client, keep: first, remove: second)
 }
 
-private func verifyDeletion(_ fixture: Fixture, client: SynthClient, keep: String, remove: String) async throws {
+private func verifyDeletion(_ fixture: RouterFixture, client: SynthClient, keep: String, remove: String) async throws {
     try await client.closeSession(remove)
     let empty = try #require(try await client.newSession(cwd: fixture.second.path).sessionId)
     try await client.deleteSession(remove)
@@ -151,7 +151,7 @@ private func verifyDeletion(_ fixture: Fixture, client: SynthClient, keep: Strin
 }
 
 private func verifyApprovals(
-    fixture: Fixture, client: SynthClient, first: String, second: String
+    fixture: RouterFixture, client: SynthClient, first: String, second: String
 ) async throws {
     let approve = turn("approve fixture write", session: first, client: client)
     let deny = turn("deny fixture write", session: second, client: client)
@@ -198,7 +198,7 @@ private func verifyConfiguration(in sessionID: String, client: SynthClient) asyn
     _ = try await wait { await client.sessions[sessionID]?.status?.agent == "build" ? true : nil }
 }
 
-private func verifyHistory(_ fixture: Fixture, client: SynthClient, first: String, second: String) async throws {
+private func verifyHistory(_ fixture: RouterFixture, client: SynthClient, first: String, second: String) async throws {
     try await client.rename("Saved fixture", in: first)
     let listed = try await client.listSessions().sessions
     #expect(Set(listed.map(\.sessionId)) == [first, second])
@@ -212,7 +212,7 @@ private func verifyHistory(_ fixture: Fixture, client: SynthClient, first: Strin
     #expect(try await client.listSessions(cwd: alias.path).sessions.map(\.sessionId) == [first])
 }
 
-private func verifyByteOutput(_ fixture: Fixture, client: SynthClient, session: String) async throws {
+private func verifyByteOutput(_ fixture: RouterFixture, client: SynthClient, session: String) async throws {
     let bytes = Data([0x61, 0xD1, 0x62, 0x0A])
     try bytes.write(to: fixture.second.appending(path: "legacy.txt"))
     #expect(try await client.prompt("read fixture bytes", in: session).stopReason == "end_turn")
@@ -229,7 +229,7 @@ private func checkByteOutput(_ client: SynthClient, session: String) async throw
 }
 
 private func verifySharedQuestion(
-    _ fixture: Fixture, client: SynthClient, guest: SynthClient, session: String
+    _ fixture: RouterFixture, client: SynthClient, guest: SynthClient, session: String
 ) async throws {
     try await guest.connect()
     _ = try await guest.loadSession(session, cwd: fixture.first.path)
@@ -247,7 +247,7 @@ private func verifySharedQuestion(
 )
 func richPromptsThroughRealRouter() async throws {
     let env = ProcessInfo.processInfo.environment
-    let fixture = try Fixture(
+    let fixture = try RouterFixture(
         engine: #require(env["SYNTH_TEST_ENGINE"]), provider: #require(env["SYNTH_TEST_PROVIDER"])
     )
     let client = fixture.client()
@@ -262,7 +262,7 @@ func richPromptsThroughRealRouter() async throws {
     try FileManager.default.removeItem(at: fixture.root)
 }
 
-private func verifyRichPrompts(_ fixture: Fixture, client: SynthClient) async throws {
+private func verifyRichPrompts(_ fixture: RouterFixture, client: SynthClient) async throws {
     let path = "project notes.txt"
     try "project fixture body".write(to: fixture.first.appending(path: path), atomically: true, encoding: .utf8)
     let skillDir = fixture.first.appending(path: ".agents/skills/fixture-skill")

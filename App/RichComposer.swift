@@ -95,63 +95,6 @@ struct RichComposer: View {
         )
         .frame(height: controller.height)
         .accessibilityLabel("Message")
-        .overlay(alignment: .top) {
-            if focused && controller.showsCompletions {
-                completions
-                    .visualEffect { content, geometry in
-                        content.offset(y: -geometry.size.height - 8)
-                    }
-            }
-        }
-        .zIndex(1)
-    }
-
-    private var completions: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if controller.fileRequest != nil {
-                ProgressView("Finding project files…").controlSize(.small)
-            } else if let error = controller.fileError {
-                Text(error).foregroundStyle(palette.danger).fixedSize(horizontal: false, vertical: true)
-                Button("Retry") { controller.refreshFiles() }
-            } else if controller.choices.isEmpty {
-                Text("No matching files").foregroundStyle(palette.muted)
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 2) {
-                            ForEach(Array(controller.choices.enumerated()), id: \.element.id) { index, choice in
-                                completionRow(choice, index: index)
-                            }
-                        }
-                    }
-                    .frame(height: min(5, CGFloat(controller.choices.count)) * 42)
-                    .onChange(of: controller.selection) { proxy.scrollTo(controller.selection) }
-                }
-            }
-        }
-        .font(.callout)
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: 10))
-        .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(palette.border) }
-        .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
-    }
-
-    private func completionRow(_ choice: ComposerController.Choice, index: Int) -> some View {
-        Button {
-            if let session = model.sessionID { controller.choose(index, model: model, session: session) }
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(choice.title).font(.callout.weight(.medium)).lineLimit(1).truncationMode(.middle)
-                Text(choice.detail).font(.caption).foregroundStyle(palette.muted).lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(6)
-            .background(index == controller.selection ? palette.alternateSurface : Color.clear)
-        }
-        .buttonStyle(.plain)
-        .id(index)
-        .accessibilityAddTraits(index == controller.selection ? .isSelected : [])
     }
 
     private func loadFiles(in session: String) async {
@@ -196,6 +139,63 @@ struct RichComposer: View {
                 model.reportDraftError(error, in: session)
             }
         }
+    }
+}
+
+struct ComposerCompletions: View {
+    @Environment(\.synthPalette) private var palette
+    let model: ConversationModel
+    let controller: ComposerController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if controller.fileRequest != nil {
+                ProgressView("Finding project files…").controlSize(.small)
+            } else if let error = controller.fileError {
+                Text(error).foregroundStyle(palette.danger).fixedSize(horizontal: false, vertical: true)
+                Button("Retry") { controller.refreshFiles() }
+            } else if controller.choices.isEmpty {
+                Text("No matching files").foregroundStyle(palette.muted)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(controller.choices.enumerated()), id: \.element.id) { index, choice in
+                                completionRow(choice, index: index)
+                            }
+                        }
+                    }
+                    .frame(height: min(5, CGFloat(controller.choices.count)) * 42)
+                    .onChange(of: controller.selection) { proxy.scrollTo(controller.selection) }
+                }
+            }
+        }
+        .font(.callout)
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10).strokeBorder(palette.border)
+                .allowsHitTesting(false)
+        }
+        .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
+    }
+
+    private func completionRow(_ choice: ComposerController.Choice, index: Int) -> some View {
+        Button {
+            if let session = model.sessionID { controller.choose(index, model: model, session: session) }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(choice.title).font(.callout.weight(.medium)).lineLimit(1).truncationMode(.middle)
+                Text(choice.detail).font(.caption).foregroundStyle(palette.muted).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(6)
+            .background(index == controller.selection ? palette.alternateSurface : Color.clear)
+        }
+        .buttonStyle(.plain)
+        .id(index)
+        .accessibilityAddTraits(index == controller.selection ? .isSelected : [])
     }
 }
 

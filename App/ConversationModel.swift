@@ -7,6 +7,13 @@ import SynthProtocol
 @Observable
 final class ConversationModel {
     let notifications = ConversationNotifications()
+    var settingsPage = SettingsPage.modelsAndMCP
+    var engineSettingsPage = EngineSettingsPage.providers
+    var customModelIDs = UserDefaults.standard.dictionary(forKey: "customModelIDs") as? [String: [String]] ?? [:] {
+        didSet { UserDefaults.standard.set(customModelIDs, forKey: "customModelIDs") }
+    }
+    var pendingMCPChanges: Set<String> = []
+    var error: String?
     private(set) var project: URL?
     private(set) var sessionID: String?
     private(set) var state: SessionState?
@@ -30,8 +37,7 @@ final class ConversationModel {
     private(set) var isShuttingDown = false
     private(set) var isUpdatingConfiguration = false
     private(set) var modelError: String?
-    private(set) var isFetchingModels = false
-    private var modelsRequested = false
+    private var fetchingModels: Set<String> = []
     var submissions: [String: Int] = [:]
     var stopping: Set<String> = []
     var client: SynthClient?
@@ -41,12 +47,13 @@ final class ConversationModel {
     private var submitting: Int { sessionID.flatMap { submissions[$0] } ?? 0 }
     private var stopRequested: Bool { sessionID.map(stopping.contains) ?? false }
     var anyBusy: Bool { submissions.values.contains { $0 > 0 } || activity.values.contains(where: \.busy) }
-    var error: String?
-
     var busy: Bool {
         submitting > 0 || (connection == .connected && state?.failure == nil && state?.status?.isBusy == true)
     }
-    var canSwitch: Bool { !isOpening && !isShuttingDown }
+    var canSwitch: Bool { !isOpening && !isShuttingDown && !isUpdatingConfiguration }
+    var canRestartEngine: Bool {
+        canSwitch && !anyBusy && importingAttachments.isEmpty && state?.status?.signIn == nil
+    }
     var canSend: Bool {
         connection == .connected && sessionID != nil && !isOpening && !isShuttingDown &&
             !isUpdatingConfiguration && state?.failure == nil &&
@@ -57,12 +64,19 @@ final class ConversationModel {
     var canStop: Bool {
         connection == .connected && sessionID != nil && busy && !stopRequested && state?.failure == nil
     }
-    var canConfigure: Bool {
-        sessionID != nil && connection == .connected && !busy && !isOpening &&
-            !isUpdatingConfiguration && !isFetchingModels && state?.failure == nil
+    var canReadConfiguration: Bool {
+        sessionID != nil && connection == .connected && !isOpening && !isShuttingDown &&
+            state?.status != nil && state?.failure == nil
+    }
+    var canConfigure: Bool { canReadConfiguration && !busy && !isUpdatingConfiguration }
+    var activeProviderID: String? {
+        guard let status = state?.status, !status.providerMissing else { return nil }
+        return status.providerID
     }
     var canDelete: Bool { canSwitch && connection == .connected && sessionID != nil && !busy }
-    var loadingModels: Bool { isFetchingModels || (state?.models?.pending ?? 0) > 0 }
+    var loadingModels: Bool {
+        (sessionID.map(fetchingModels.contains) ?? false) || (state?.models?.pending ?? 0) > 0
+    }
 
     func open(in folder: URL? = nil, stored: ACP.SessionInfo? = nil, identifier: String? = nil) async {
         guard canSwitch else { return }
@@ -119,12 +133,11 @@ final class ConversationModel {
         modes = opened.modes
         error = failures[opened.id]
         modelError = nil
-        modelsRequested = false
         persist()
     }
 
     func reconnect() async {
-        guard !isOpening else { return }
+        guard canSwitch else { return }
         guard let client, let sessionID else {
             await open(in: pendingSelection?.folder, identifier: pendingSelection?.sessionID)
             for folder in groups.compactMap(\.folder) {
@@ -145,7 +158,6 @@ final class ConversationModel {
                 setup = nil
             }
             if let modes = setup?.modes?.availableModes { self.modes = modes }
-            modelsRequested = false
             modelError = nil
             await refresh(from: client)
             await refreshHistory()
@@ -238,10 +250,9 @@ extension ConversationModel {
         )
     }
 
-    func retryProvider() async {
-        guard canSwitch, !anyBusy, let client, let previous = sessionID else { return }
-        let folder = project
-        let wasEmpty = messages.isEmpty && state?.dropped == 0
+    func restartEngine() async {
+        guard canRestartEngine, let client, let selected = sessionID else { return }
+        let conversations = openedSessions.values.sorted { $0.id < $1.id }
         isOpening = true
         error = nil
         defer { isOpening = false }
@@ -249,31 +260,60 @@ extension ConversationModel {
         do {
             let engine = try await makeClient()
             replacement = engine
-            await client.disconnect()
-            guard !isShuttingDown else { throw SynthClient.Failure.disconnected }
             let attention = await engine.attentionEvents()
             try await engine.connect()
-            let opened: OpenedConversation
-            do {
-                opened = try await obtainSession(previous, in: folder, stored: nil, client: engine)
-            } catch where wasEmpty && Self.isMissingSession(error) {
-                opened = try await obtainSession(nil, in: folder, stored: nil, client: engine)
+            let previous = await client.sessions
+            guard !isShuttingDown, !previous.values.contains(where: {
+                $0.failure == nil && ($0.status?.isBusy == true || $0.status?.signIn != nil)
+            }) else {
+                throw ConfigurationUnavailable()
             }
+            await client.disconnect()
             guard !isShuttingDown else { throw SynthClient.Failure.disconnected }
-            if opened.id != previous {
-                openedSessions.removeValue(forKey: previous)
-                drafts[opened.id] = drafts.removeValue(forKey: previous)
-                failedDrafts[opened.id] = failedDrafts.removeValue(forKey: previous)
-            }
             observing?.cancel()
             self.client = engine
-            select(opened)
-            await refresh(from: engine)
             await observe(engine, attention: attention)
-            await loadGroup(folder, refresh: true)
+            await reopenConversations(conversations, selected: selected, states: previous, client: engine)
+            await refresh(from: engine)
+            await refreshHistory()
         } catch {
             await replacement?.disconnect()
             self.error = error.localizedDescription
+        }
+    }
+
+    private func reopenConversations(
+        _ conversations: [OpenedConversation], selected: String, states: [String: SessionState], client: SynthClient
+    ) async {
+        var restored = true
+        for conversation in conversations {
+            guard !isShuttingDown else { return }
+            do {
+                let opened = try await reopen(conversation, state: states[conversation.id], client: client)
+                if conversation.id == selected { select(opened) }
+            } catch {
+                restored = false
+                if conversation.id == selected { self.error = error.localizedDescription }
+            }
+        }
+        if restored {
+            pendingMCPChanges.removeAll()
+        } else if error == nil {
+            error = "Some conversations could not be reopened. Select a conversation to try again."
+        }
+    }
+
+    private func reopen(
+        _ previous: OpenedConversation, state: SessionState?, client: SynthClient
+    ) async throws -> OpenedConversation {
+        do {
+            return try await obtainSession(previous.id, in: previous.folder, stored: nil, client: client)
+        } catch where state?.messages.isEmpty == true && state?.dropped == 0 && Self.isMissingSession(error) {
+            let opened = try await obtainSession(nil, in: previous.folder, stored: nil, client: client)
+            openedSessions.removeValue(forKey: previous.id)
+            drafts[opened.id] = drafts.removeValue(forKey: previous.id)
+            failedDrafts[opened.id] = failedDrafts.removeValue(forKey: previous.id)
+            return opened
         }
     }
 
@@ -299,44 +339,42 @@ extension ConversationModel {
     }
 }
 
-extension ConversationModel {
-    var hasRequestedModels: Bool { modelsRequested }
+private struct ConfigurationUnavailable: LocalizedError {
+    var errorDescription: String? { "This conversation is not ready for changes." }
+}
 
+extension ConversationModel {
     func fetchModels() async {
-        guard canConfigure, let client, let sessionID else { return }
+        guard canReadConfiguration, let client, let sessionID, fetchingModels.insert(sessionID).inserted else { return }
         modelError = nil
-        modelsRequested = true
-        isFetchingModels = true
-        defer { isFetchingModels = false }
+        defer { fetchingModels.remove(sessionID) }
         do {
             try await client.fetchModels(in: sessionID)
-        } catch {
+        } catch where !Task.isCancelled && self.sessionID == sessionID && self.client === client {
             modelError = error.localizedDescription
-        }
+        } catch {}
     }
 
     func selectMode(_ mode: ACP.Mode) async {
-        await configure { try await $0.setMode(mode.id, in: $1) }
-    }
-
-    func selectModel(_ model: Synth.Model) async {
-        await configure { try await $0.setModel(model, in: $1) }
-    }
-
-    func selectEffort(_ effort: String) async {
-        await configure { try await $0.setEffort(effort, in: $1) }
-    }
-
-    private func configure(_ operation: (SynthClient, String) async throws -> Void) async {
-        guard canConfigure, let client, let sessionID else { return }
-        isUpdatingConfiguration = true
-        defer { isUpdatingConfiguration = false }
+        guard canConfigure, let sessionID else { return }
         do {
-            try await operation(client, sessionID)
-            await refresh(from: client)
+            try await configure(in: sessionID) { try await $0.setMode(mode.id, in: $1) }
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    func configure(in session: String, _ operation: (SynthClient, String) async throws -> Void) async throws {
+        guard canConfigure, sessionID == session, let client else { throw ConfigurationUnavailable() }
+        isUpdatingConfiguration = true
+        defer { isUpdatingConfiguration = false }
+        do {
+            try await operation(client, session)
+        } catch {
+            await refresh(from: client)
+            throw error
+        }
+        await refresh(from: client)
     }
 
     func decide(_ request: RequestID, option: String) async {

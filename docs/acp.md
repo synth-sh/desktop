@@ -26,7 +26,12 @@ are in flight.
 | `_synth/compact` | `sessionId`. Starts compaction for an idle conversation. |
 | `_synth/load_attachment` | `sessionId`, message `seq`, and zero-based `index`. Returns the stored text attachment. |
 | `_synth/load_image` | `sessionId`, message `seq`, and zero-based `index`. Returns one stored image as a base64 string. |
-| `_synth/models` | `sessionId`. Returns cached offers and a count of pending provider lookups. The engine sends `_synth/models_updated` as lookups finish. |
+| `_synth/models` | `sessionId`. Returns cached offers, project recents, and pending provider lookups. The engine sends `_synth/models_updated` as lookups finish. |
+| `_synth/providers` | `sessionId`. Returns provider IDs, hosts, connection state, and the active provider. |
+| `_synth/connect_provider` | `sessionId`, provider ID, optional host and key, and optional `activate` (default true). With `activate: false`, configuring another provider keeps the current model and refreshes discovery. If the session has no provider, the configured provider is activated. |
+| `_synth/cancel_sign_in` | `sessionId`. Cancels the provider sign-in in progress. |
+| `_synth/sign_out` | `sessionId` and optional OAuth provider ID. Signs out of the named provider or uses the session's sign-out default. |
+| `_synth/toggle_mcp` | `sessionId` and server name. Enables or disables a configured MCP server in the running session. |
 | `$/cancel_request` | Notification with `requestId`. Withdraws an individual request. Withdrawing a prompt request leaves the turn running. |
 
 The desktop composer uses three prompt block types:
@@ -50,7 +55,9 @@ by the engine. `_synth/appended` and `_synth/updated` carry a whole message
 identified by `seq` within its session. `_synth/stream` adds text and reasoning
 to a request number. Show the stream when that number matches the latest
 `_synth/status` request. A finalized assistant message supersedes its stream.
-`_synth/notice` carries a user-visible message. Every event names its session.
+`_synth/notice` carries a user-visible message. The `mcp` list in the status
+reports each loaded server as `off`, `connecting`, `connected`, or `failed`,
+with a reason when available. Every event names its session.
 The engine can encode text payloads containing invalid UTF-8 as arrays of byte
 values. The desktop client displays those payloads with replacement characters
 where needed. The original bytes stay in the engine's data.
