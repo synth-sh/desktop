@@ -8,7 +8,7 @@ private struct TimedOut: Error, CustomStringConvertible {
     var description: String { "Timed out waiting for RouterTests.swift:\(line)" }
 }
 
-private struct Fixture {
+struct RouterFixture {
     let root: URL
     let engine: URL
     let environment: [String: String]
@@ -69,60 +69,11 @@ private func turn(_ text: String, session: String, client: SynthClient) -> Task<
     .enabled(if: ProcessInfo.processInfo.environment["SYNTH_TEST_ENGINE"] != nil, "Run the fake provider harness"),
     .timeLimit(.minutes(1))
 )
-func providerChangesRefreshModelsAndKeepTheEffectiveEndpoint() async throws {
-    let env = ProcessInfo.processInfo.environment
-    let engine = try #require(env["SYNTH_TEST_ENGINE"])
-    let endpoint = try #require(env["SYNTH_TEST_PROVIDER"])
-    let fixture = try Fixture(engine: engine, provider: endpoint)
-    let client = fixture.client()
-    do {
-        try await checkProviderChanges(client, cwd: fixture.first.path, endpoint: endpoint)
-    } catch {
-        await client.disconnect()
-        try? FileManager.default.removeItem(at: fixture.root)
-        throw error
-    }
-    await client.disconnect()
-    try FileManager.default.removeItem(at: fixture.root)
-}
-
-private func checkProviderChanges(_ client: SynthClient, cwd: String, endpoint: String) async throws {
-    _ = try await client.connect()
-    let session = try #require(try await client.newSession(cwd: cwd).sessionId)
-    let provider = "openai-compat"
-    #expect(try await client.providers(in: session).first { $0.id == provider }?.host == endpoint)
-    await #expect(throws: RPCError.self) {
-        try await client.setModel("gpt-custom", provider: "openai", in: session)
-    }
-    #expect(try await client.providers(in: session).first(where: \.active)?.id == provider)
-    try await client.connectProvider(provider, key: "fixture-rotated-key", in: session)
-    #expect(try await client.providers(in: session).first { $0.id == provider }?.host == endpoint)
-    try await expectProviderModels(["gpt-fixture-key"], provider: provider, client: client, session: session)
-
-    let endpointURL = try #require(URL(string: endpoint))
-    let alternate = endpointURL.deletingLastPathComponent().appending(path: "alternate/v1").absoluteString
-    try await client.connectProvider(provider, host: alternate, key: nil, in: session)
-    try await expectProviderModels(["gpt-fixture-other-endpoint"], provider: provider, client: client, session: session)
-}
-
-private func expectProviderModels(
-    _ expected: [String], provider: String, client: SynthClient, session: String, line: Int = #line
-) async throws {
-    _ = try await wait(line: line) {
-        let models = await client.sessions[session]?.models?.offered.filter { $0.providerID == provider }.map(\.name)
-        return models == expected ? true : nil
-    }
-}
-
-@Test(
-    .enabled(if: ProcessInfo.processInfo.environment["SYNTH_TEST_ENGINE"] != nil, "Run the fake provider harness"),
-    .timeLimit(.minutes(1))
-)
 func twoSessionsThroughRealRouter() async throws {
     let env = ProcessInfo.processInfo.environment
     let engine = try #require(env["SYNTH_TEST_ENGINE"])
     let provider = try #require(env["SYNTH_TEST_PROVIDER"])
-    let fixture = try Fixture(engine: engine, provider: provider)
+    let fixture = try RouterFixture(engine: engine, provider: provider)
     let client = fixture.client()
     let guest = fixture.client()
     do {
@@ -138,7 +89,7 @@ func twoSessionsThroughRealRouter() async throws {
     try FileManager.default.removeItem(at: fixture.root)
 }
 
-private func runScenario(fixture: Fixture, client: SynthClient, guest: SynthClient) async throws {
+private func runScenario(fixture: RouterFixture, client: SynthClient, guest: SynthClient) async throws {
     let initReply = try await client.connect()
     #expect(initReply.metadata?.synth?.protocol == ACP.synthVersion)
     let first = try #require(try await client.newSession(cwd: fixture.first.path).sessionId)
@@ -189,7 +140,7 @@ private func runScenario(fixture: Fixture, client: SynthClient, guest: SynthClie
     try await verifyDeletion(fixture, client: client, keep: first, remove: second)
 }
 
-private func verifyDeletion(_ fixture: Fixture, client: SynthClient, keep: String, remove: String) async throws {
+private func verifyDeletion(_ fixture: RouterFixture, client: SynthClient, keep: String, remove: String) async throws {
     try await client.closeSession(remove)
     let empty = try #require(try await client.newSession(cwd: fixture.second.path).sessionId)
     try await client.deleteSession(remove)
@@ -200,7 +151,7 @@ private func verifyDeletion(_ fixture: Fixture, client: SynthClient, keep: Strin
 }
 
 private func verifyApprovals(
-    fixture: Fixture, client: SynthClient, first: String, second: String
+    fixture: RouterFixture, client: SynthClient, first: String, second: String
 ) async throws {
     let approve = turn("approve fixture write", session: first, client: client)
     let deny = turn("deny fixture write", session: second, client: client)
@@ -247,7 +198,7 @@ private func verifyConfiguration(in sessionID: String, client: SynthClient) asyn
     _ = try await wait { await client.sessions[sessionID]?.status?.agent == "build" ? true : nil }
 }
 
-private func verifyHistory(_ fixture: Fixture, client: SynthClient, first: String, second: String) async throws {
+private func verifyHistory(_ fixture: RouterFixture, client: SynthClient, first: String, second: String) async throws {
     try await client.rename("Saved fixture", in: first)
     let listed = try await client.listSessions().sessions
     #expect(Set(listed.map(\.sessionId)) == [first, second])
@@ -261,7 +212,7 @@ private func verifyHistory(_ fixture: Fixture, client: SynthClient, first: Strin
     #expect(try await client.listSessions(cwd: alias.path).sessions.map(\.sessionId) == [first])
 }
 
-private func verifyByteOutput(_ fixture: Fixture, client: SynthClient, session: String) async throws {
+private func verifyByteOutput(_ fixture: RouterFixture, client: SynthClient, session: String) async throws {
     let bytes = Data([0x61, 0xD1, 0x62, 0x0A])
     try bytes.write(to: fixture.second.appending(path: "legacy.txt"))
     #expect(try await client.prompt("read fixture bytes", in: session).stopReason == "end_turn")
@@ -278,7 +229,7 @@ private func checkByteOutput(_ client: SynthClient, session: String) async throw
 }
 
 private func verifySharedQuestion(
-    _ fixture: Fixture, client: SynthClient, guest: SynthClient, session: String
+    _ fixture: RouterFixture, client: SynthClient, guest: SynthClient, session: String
 ) async throws {
     try await guest.connect()
     _ = try await guest.loadSession(session, cwd: fixture.first.path)
@@ -296,7 +247,7 @@ private func verifySharedQuestion(
 )
 func richPromptsThroughRealRouter() async throws {
     let env = ProcessInfo.processInfo.environment
-    let fixture = try Fixture(
+    let fixture = try RouterFixture(
         engine: #require(env["SYNTH_TEST_ENGINE"]), provider: #require(env["SYNTH_TEST_PROVIDER"])
     )
     let client = fixture.client()
@@ -311,7 +262,7 @@ func richPromptsThroughRealRouter() async throws {
     try FileManager.default.removeItem(at: fixture.root)
 }
 
-private func verifyRichPrompts(_ fixture: Fixture, client: SynthClient) async throws {
+private func verifyRichPrompts(_ fixture: RouterFixture, client: SynthClient) async throws {
     let path = "project notes.txt"
     try "project fixture body".write(to: fixture.first.appending(path: path), atomically: true, encoding: .utf8)
     let skillDir = fixture.first.appending(path: ".agents/skills/fixture-skill")

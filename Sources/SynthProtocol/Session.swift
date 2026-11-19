@@ -178,6 +178,7 @@ public enum Synth {
         public let vision: Bool?
         public let providerMissing: Bool
         public let signIn: SignIn?
+        public let signingOut: Bool?
         public let mcp: [MCPServer]?
         public let effort: String
         public let efforts: [String]
@@ -203,6 +204,7 @@ public enum Synth {
             case vision
             case providerMissing = "provider_missing"
             case signIn = "sign_in"
+            case signingOut = "signing_out"
             case mcp
             case effort
             case efforts

@@ -1,4 +1,5 @@
 import SwiftUI
+import SynthClient
 import SynthProtocol
 
 struct ModelBrowser: View {
@@ -55,16 +56,16 @@ struct ModelBrowser: View {
                 Text(search.isEmpty ? "No models available for this provider selection." : "No matching models.")
                     .foregroundStyle(.secondary)
             }
-            if !readOnly, let selected {
+            if !readOnly, let status = model.state?.status, !status.efforts.isEmpty {
                 Divider()
-                selectionControls(selected)
+                effortControl(levels: status.efforts, current: status.effort)
             }
         }
         .onChange(of: query) {
             highlight = nil
             applyError = nil
         }
-        .onChange(of: selected?.id) { effort = nil }
+        .onChange(of: model.state?.status?.model) { effort = nil }
         .task(id: model.activeProviderID) {
             if !readOnly { await loadConnectedProviders() }
             if !model.loadingModels { await model.fetchModels() }
@@ -208,7 +209,7 @@ private extension ModelBrowser {
         } else {
             Button {
                 highlight = option.id
-                applyError = nil
+                apply(option)
             } label: {
                 rowLabel(option)
                     .padding(.vertical, 5)
@@ -218,7 +219,7 @@ private extension ModelBrowser {
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(highlighted ? .isSelected : [])
-            .disabled(model.isUpdatingConfiguration)
+            .disabled(!canApply)
         }
     }
 
@@ -239,26 +240,14 @@ private extension ModelBrowser {
         }
     }
 
-    func selectionControls(_ selected: ModelChoice) -> some View {
-        let levels = isCurrent(selected) ? (model.state?.status?.efforts ?? []) : selected.model.efforts
-        let remembered = isCurrent(selected) ? (model.state?.status?.effort ?? "") : selected.model.effort
-        let current = isCurrent(selected)
-        let defaultEffort = levels.contains(remembered) ? remembered : levels.first ?? ""
-        return VStack(alignment: .leading, spacing: 8) {
-            if !levels.isEmpty {
-                ReasoningEffortSlider(levels: levels, selection: Binding(
-                    get: { effort.flatMap { levels.contains($0) ? $0 : nil } ?? defaultEffort },
-                    set: { effort = $0 == defaultEffort ? nil : $0; applyError = nil }
-                )) {
-                    if current, effort != nil { apply(selected, dismiss: false) }
-                }
-                .id(selected.id)
-            }
-            if !current {
-                Button("Use Model") { apply(selected) }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
+    func effortControl(levels: [String], current: String) -> some View {
+        let defaultEffort = levels.contains(current) ? current : levels.first ?? ""
+        return ReasoningEffortSlider(levels: levels, selection: Binding(
+            get: { effort.flatMap { levels.contains($0) ? $0 : nil } ?? defaultEffort },
+            set: { effort = $0 == defaultEffort ? nil : $0; applyError = nil }
+        )) {
+            guard let effort else { return }
+            configure { client, session in try await client.setEffort(effort, in: session) }
         }
         .disabled(!canApply)
     }
@@ -274,31 +263,26 @@ private extension ModelBrowser {
         applyError = nil
     }
 
-    func apply(_ selected: ModelChoice?, dismiss: Bool = true) {
-        guard canApply, let selected, let session = model.sessionID else { return }
-        let current = isCurrent(selected)
-        let levels = current ? (model.state?.status?.efforts ?? []) : selected.model.efforts
-        let level = effort.flatMap { levels.contains($0) ? $0 : nil }
-        if current, level == nil {
-            if dismiss { onApply() }
+    func apply(_ selected: ModelChoice?) {
+        guard canApply, let selected else { return }
+        if isCurrent(selected) {
+            onApply()
             return
         }
+        configure(dismiss: true) { client, session in try await client.setModel(selected.model, in: session) }
+    }
+
+    func configure(dismiss: Bool = false, _ operation: @escaping (SynthClient, String) async throws -> Void) {
+        guard canApply, let session = model.sessionID else { return }
         applyError = nil
         Task {
             do {
-                try await model.configure(in: session) { client, session in
-                    if current, let level {
-                        try await client.setEffort(level, in: session)
-                    } else {
-                        try await client.setModel(selected.model, effort: level, in: session)
-                    }
-                }
-                effort = nil
+                try await model.configure(in: session, operation)
                 if dismiss { onApply() }
             } catch {
-                if current { effort = nil }
                 applyError = error.localizedDescription
             }
+            effort = nil
         }
     }
 }

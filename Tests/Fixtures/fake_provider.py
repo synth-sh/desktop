@@ -28,17 +28,28 @@ class Handler(BaseHTTPRequestHandler):
                 else ["gpt-fixture", "gpt-fixture-alt"]
             )
         elif self.path == "/alternate/v1/models":
-            models = ["gpt-fixture-other-endpoint"]
+            self.send_body(b'{"data":[{"id":"gpt-fixture-other-endpoint","context_length":262144},'
+                           b'{"id":"gpt-fixture-small","context_length":4096}]}', "application/json")
+            return
+        elif self.path == "/api/tags":
+            self.send_body(b'{"models":[{"model":"fixture-ollama"}]}', "application/json")
+            return
         else:
             self.send_error(404)
             return
         self.send_body(json.dumps({"data": [{"id": model} for model in models]}).encode(), "application/json")
 
     def do_POST(self):
-        if self.path != "/v1/chat/completions":
+        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path == "/api/show":
+            if request["model"] == "fixture-ollama":
+                self.send_body(b'{"model_info":{"fixture.context_length":262144}}', "application/json")
+            else:
+                self.send_error(404)
+            return
+        if self.path not in ("/v1/chat/completions", "/alternate/v1/chat/completions"):
             self.send_error(404)
             return
-        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         messages = request["messages"]
         last = messages[-1]
         prompt = last.get("content")

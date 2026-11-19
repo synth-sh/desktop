@@ -65,11 +65,15 @@ choice for the next launch.
 Use **Synth > Settings > Models & MCP** (⌘,) to connect providers and manage
 MCP servers. Use the plus button next to model search to save an unlisted
 model ID for a supported provider. Saved IDs appear in the conversation's
-model picker alongside the provider catalog.
+model picker alongside the provider catalog. Click a model in the
+conversation picker to switch to it. Saving another provider in Settings
+makes its models available in the picker.
 
-The **MCP Servers** tab shows each server's connection status in the current
-conversation. Use **Restart Engine** to reload definition changes for open
-conversations without quitting Desktop. Finish active turns before restarting.
+The **MCP Servers** tab has forms for standard I/O and HTTP servers. Use the
+JSON button in the editor for direct configuration. The list shows each
+server's connection status in the current conversation. Use **Restart Engine**
+to reload definitions for open conversations without quitting Desktop. Finish
+active turns before restarting.
 The connection switch applies immediately to a loaded server. To enable a
 server disabled in its definition, edit the definition and restart the engine.
 Conversations shared with another client reload their configuration when their

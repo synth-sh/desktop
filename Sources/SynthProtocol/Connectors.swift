@@ -11,12 +11,24 @@ extension Synth {
         public let provider: String
         public let host: String?
         public let key: String?
+        public let activate: Bool
 
-        public init(sessionID: String, provider: String, host: String?, key: String?) {
+        public init(sessionID: String, provider: String, host: String?, key: String?, activate: Bool = true) {
             sessionId = sessionID
             self.provider = provider
             self.host = host
             self.key = key
+            self.activate = activate
+        }
+    }
+
+    public struct SignOutProvider: Encodable, Sendable {
+        public let sessionId: String
+        public let provider: String?
+
+        public init(sessionID: String, provider: String?) {
+            sessionId = sessionID
+            self.provider = provider
         }
     }
 

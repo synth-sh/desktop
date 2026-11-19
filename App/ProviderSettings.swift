@@ -43,7 +43,11 @@ struct ProviderSettings: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: RefreshKey(active: model.activeProviderID, signingIn: signIn != nil)) {
+        .task(id: RefreshKey(
+            active: model.activeProviderID,
+            signingIn: signIn != nil,
+            signingOut: model.state?.status?.signingOut == true
+        )) {
             await reload()
         }
         .onChange(of: signIn == nil) { if signIn == nil { signInError = nil } }
@@ -52,6 +56,7 @@ struct ProviderSettings: View {
     private struct RefreshKey: Equatable {
         let active: String?
         let signingIn: Bool
+        let signingOut: Bool
     }
 
     private func providerRow(_ provider: Synth.Provider) -> some View {
@@ -137,7 +142,7 @@ private struct ProviderDetails: View {
             Text("Models").font(.headline)
             ModelBrowser(model: model, providerID: provider.id, readOnly: true)
             Spacer(minLength: 0)
-            Text("Provider credentials are shared with the terminal client. Model selection remains per conversation.")
+            Text("Choose a model in the conversation picker. Credentials are shared with the terminal client.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -167,8 +172,11 @@ private struct ProviderDetails: View {
             }
             HStack {
                 Spacer()
-                if kind.authentication == .browser && provider.connected && active {
+                if kind.authentication == .browser && provider.connected {
                     Label("Signed in", systemImage: "checkmark.circle").foregroundStyle(.secondary)
+                    if model.activeProviderID == nil {
+                        Button("Connect") { connect(kind) }
+                    }
                     Button("Sign Out…") { confirmSignOut = true }
                 } else {
                     Button(connectTitle(kind)) { connect(kind) }
@@ -177,11 +185,12 @@ private struct ProviderDetails: View {
             }
             if let connectionError {
                 Text(connectionError).font(.callout).foregroundStyle(.red).textSelection(.enabled)
-            } else if attemptedSignIn, !active, let notice = model.state?.notices.last, notice != noticeBeforeSignIn {
+            } else if attemptedSignIn, !provider.connected, let notice = model.state?.notices.last,
+                      notice != noticeBeforeSignIn {
                 Text(notice).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
-        .disabled(!model.canConfigure || signingIn)
+        .disabled(!model.canConfigure || signingIn || model.state?.status?.signingOut == true)
     }
 
     private func keyPrompt(_ kind: ProviderKind) -> String {
@@ -190,18 +199,17 @@ private struct ProviderDetails: View {
     }
 
     private func connectTitle(_ kind: ProviderKind) -> String {
-        if kind.authentication == .browser { return provider.connected ? "Use Provider" : "Sign In…" }
-        return active ? "Save & Reconnect" : "Connect"
+        if kind.authentication == .browser { return "Sign In…" }
+        if active { return "Save & Reconnect" }
+        return model.activeProviderID == nil ? "Connect" : "Save Provider"
     }
 
     private func signOut() {
-        // ACP signs out the active OAuth provider, not an arbitrary catalog entry.
-        guard active, let session = model.sessionID else { return }
+        guard let session = model.sessionID else { return }
         connectionError = nil
         Task {
-            guard active else { return }
             do {
-                try await model.configure(in: session) { try await $0.signOut(in: $1) }
+                try await model.configure(in: session) { try await $0.signOut(provider.id, in: $1) }
                 await reload()
             } catch {
                 connectionError = error.localizedDescription
@@ -224,7 +232,9 @@ private struct ProviderDetails: View {
         Task {
             do {
                 try await model.configure(in: session) { client, session in
-                    try await client.connectProvider(provider.id, host: host, key: submittedKey, in: session)
+                    try await client.connectProvider(
+                        provider.id, host: host, key: submittedKey, activate: false, in: session
+                    )
                 }
                 endpoint = nil
             } catch {
