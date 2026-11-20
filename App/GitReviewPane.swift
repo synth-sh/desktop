@@ -5,132 +5,81 @@ struct GitReviewPane: View {
     @Environment(\.synthPalette) private var palette
     let directory: URL
     let turnCompletion: UInt64?
+    @AppStorage("gitChangedFilesWidth") private var filesWidth = 0.0
+    @State private var roots: [URL] = []
+    @State private var selectedRoot: URL?
+    @State private var comparisons: [URL: GitRepository.Comparison] = [:]
     @State private var repository: GitRepository?
-    @State private var requestedComparison: GitRepository.Comparison?
     @State private var changes: GitChanges?
     @State private var selected: GitChangedFile.ID?
     @State private var showsFiles: Bool?
     @State private var paneWidth: CGFloat = 0
     @State private var filter = ""
     @State private var refresh = 0
-    @State private var changeVersion = UUID()
-    @State private var error: String?
-    @State private var loading = true
+    @State private var scanVersion = UUID()
+    @State private var loadedRequest: ReviewRequest?
+    @State private var discoveryError: String?
+    @State private var comparisonError: String?
+    @State private var scanning = true
+    @State private var loading = false
 
-    private struct Request: Hashable {
+    private struct ScanRequest: Hashable {
         let refresh: Int
         let turnCompletion: UInt64?
+    }
+
+    private struct ReviewRequest: Hashable {
+        let root: URL
         let comparison: GitRepository.Comparison?
+        let version: UUID
     }
 
-    private var request: Request {
-        Request(refresh: refresh, turnCompletion: turnCompletion, comparison: requestedComparison)
+    private var reviewRequest: ReviewRequest? {
+        selectedRoot.map { ReviewRequest(root: $0, comparison: comparisons[$0], version: scanVersion) }
     }
 
-    private var file: GitChangedFile? { changes?.files.first { $0.id == selected } }
-    private var docksFiles: Bool { paneWidth >= 540 }
+    private var comparison: Binding<GitRepository.Comparison?> {
+        let root = selectedRoot
+        return Binding {
+            root.flatMap { comparisons[$0] }
+        } set: { value in
+            if let root { comparisons[root] = value }
+        }
+    }
+
+    private var docksFiles: Bool { paneWidth >= 555 }
     private var filesVisible: Bool { showsFiles ?? docksFiles }
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            GitReviewHeader(
+                directory: directory, roots: roots, repository: repository?.root == selectedRoot ? repository : nil,
+                selectedRoot: $selectedRoot, comparison: comparison, filesVisible: filesVisible,
+                hasFiles: !scanning && !loading && loadedRequest == reviewRequest && changes?.files.isEmpty == false,
+                refresh: { refresh += 1 }, toggleFiles: { showsFiles = !filesVisible }
+            )
             Divider()
-            review
+            review.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.background)
         .foregroundStyle(palette.foreground)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { paneWidth = $0 }
-        .task(id: request) { await loadComparison() }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                    .foregroundStyle(palette.accent)
-                    .accessibilityHidden(true)
-                Text(repository?.name ?? "Git Changes")
-                    .font(.headline)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(repository?.root.path ?? directory.path)
-                Spacer(minLength: 4)
-                Button("Refresh Git Changes", systemImage: "arrow.clockwise") { refresh += 1 }
-                    .accessibilityIdentifier("RefreshGitChanges")
-                    .help("Refresh Git Changes")
-                Button(filesVisible ? "Hide Files" : "Show Files", systemImage: "sidebar.right") {
-                    showsFiles = !filesVisible
-                }
-                .accessibilityLabel(filesVisible ? "Hide Files" : "Show Files")
-                .help(filesVisible ? "Hide Files" : "Show Files")
-            }
-            .buttonStyle(.borderless)
-            .labelStyle(.iconOnly)
-            if let repository { comparisonControls(repository) }
+        .onChange(of: selectedRoot) {
+            selected = nil
+            filter = ""
         }
-        .padding(12)
-        .background(palette.surface)
-    }
-
-    private func comparisonControls(_ repository: GitRepository) -> some View {
-        HStack(spacing: 8) {
-            Label(repository.branch, systemImage: "arrow.triangle.branch")
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(repository.branch)
-                .accessibilityLabel("Current branch \(repository.branch)")
-            Spacer(minLength: 4)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("Compare to").font(.caption2)
-                Menu {
-                    Button {
-                        requestedComparison = .workingTree
-                    } label: {
-                        comparisonOption("Working changes against HEAD", selection: .workingTree)
-                    }
-                    if !repository.branches.isEmpty {
-                        Divider()
-                        ForEach(repository.branches) { branch in
-                            Button {
-                                requestedComparison = .branch(branch.id)
-                            } label: {
-                                comparisonOption(branch.name, selection: .branch(branch.id))
-                            }
-                        }
-                    }
-                } label: {
-                    Text(comparisonTitle(in: repository))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .help("Compare to \(comparisonTitle(in: repository))")
-                .accessibilityLabel("Compare to \(comparisonTitle(in: repository))")
-                .accessibilityIdentifier("GitComparison")
-            }
+        .task(id: ScanRequest(refresh: refresh, turnCompletion: turnCompletion)) { await scanRepositories() }
+        .task(id: reviewRequest) {
+            if let request = reviewRequest { await loadComparison(request) }
         }
-        .font(.caption)
-        .foregroundStyle(palette.muted)
-    }
-
-    private func comparisonTitle(in repository: GitRepository) -> String {
-        switch requestedComparison ?? repository.defaultComparison {
-        case .workingTree: "HEAD · Working changes"
-        case .branch(let identifier):
-            repository.branches.first { $0.id == identifier }?.name ?? identifier
-        }
-    }
-
-    private func comparisonOption(_ title: String, selection: GitRepository.Comparison) -> some View {
-        let current = requestedComparison ?? repository?.defaultComparison
-        return Label(title, systemImage: current == selection ? "checkmark" : "")
     }
 
     @ViewBuilder
     private var review: some View {
-        if loading {
-            ProgressView("Reading Git changes…").frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let error {
+        if scanning || (reviewRequest != nil && (loading || loadedRequest != reviewRequest)) {
+            ProgressView("Reading Git changes…")
+        } else if let error = discoveryError ?? comparisonError {
             ContentUnavailableView {
                 Label("Git Changes Unavailable", systemImage: "exclamationmark.circle")
             } description: {
@@ -138,7 +87,7 @@ struct GitReviewPane: View {
             } actions: {
                 Button("Retry") { refresh += 1 }
             }
-        } else if let changes, let file {
+        } else if let changes, let file = changes.files.first(where: { $0.id == selected }) {
             patchAndFiles(changes, file: file)
         } else {
             ContentUnavailableView(
@@ -150,54 +99,64 @@ struct GitReviewPane: View {
     }
 
     private func patchAndFiles(_ changes: GitChanges, file: GitChangedFile) -> some View {
-        HStack(spacing: 0) {
-            GitFilePatchView(changes: changes, file: file, filePicker: !filesVisible, selection: $selected)
-                .id(PatchIdentity(version: changeVersion, file: file.id))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if docksFiles && filesVisible { filesList(changes.files) }
-        }
-        .overlay(alignment: .trailing) {
-            if !docksFiles && filesVisible {
-                filesList(changes.files).shadow(color: .black.opacity(0.18), radius: 8, x: -3)
-            }
-        }
-    }
-
-    private func filesList(_ files: [GitChangedFile]) -> some View {
         let selection = Binding(get: { selected }, set: { file in
             selected = file
             if !docksFiles { showsFiles = false }
         })
-        return HStack(spacing: 0) {
-            Divider()
-            GitChangedFiles(files: files, selected: selection, filter: $filter)
-                .frame(width: 160)
+        return ResizableTrailingPane(
+            savedWidth: $filesWidth, isPresented: filesVisible,
+            defaultWidth: 215, minimumWidth: 150, minimumMainWidth: docksFiles ? 275 : 36,
+            dividerLabel: "Changed files width", overlaysMain: !docksFiles
+        ) {
+            GitFilePatchView(changes: changes, file: file, filePicker: !filesVisible, selection: $selected)
+                .id(PatchIdentity(request: reviewRequest, file: file.id))
+        } pane: {
+            GitChangedFiles(files: changes.files, selected: selection, filter: $filter)
         }
     }
 
     private struct PatchIdentity: Hashable {
-        let version: UUID
+        let request: ReviewRequest?
         let file: GitChangedFile.ID
     }
 
-    private func loadComparison() async {
+    private func scanRepositories() async {
+        scanning = true
+        discoveryError = nil
+        defer { if !Task.isCancelled { scanning = false } }
+        do {
+            let found = try await gitBackground { [directory] in try GitRepository.reviewRoots(in: directory) }
+            try Task.checkCancellation()
+            roots = found
+            if selectedRoot.map(found.contains) != true { selectedRoot = found.first }
+            scanVersion = UUID()
+            if found.isEmpty { discoveryError = GitReviewError.notRepository.localizedDescription }
+        } catch is CancellationError {
+            return
+        } catch {
+            if !Task.isCancelled { discoveryError = error.localizedDescription }
+        }
+    }
+
+    private func loadComparison(_ request: ReviewRequest) async {
+        loadedRequest = request
         loading = true
-        error = nil
+        comparisonError = nil
+        changes = nil
         defer { if !Task.isCancelled { loading = false } }
         do {
-            let repo = try await gitBackground { [directory] in try GitRepository.discover(at: directory) }
+            let repo = try await gitBackground { try GitRepository.discover(at: request.root) }
             try Task.checkCancellation()
             repository = repo
-            let comparison = requestedComparison ?? repo.defaultComparison
+            let comparison = request.comparison ?? repo.defaultComparison
             let result = try await gitBackground { try repo.changes(comparedTo: comparison) }
             try Task.checkCancellation()
             changes = result
-            changeVersion = UUID()
             if !result.files.contains(where: { $0.id == selected }) { selected = result.files.first?.id }
         } catch is CancellationError {
             return
         } catch {
-            if !Task.isCancelled { self.error = error.localizedDescription }
+            if !Task.isCancelled { comparisonError = error.localizedDescription }
         }
     }
 }
@@ -218,7 +177,7 @@ private struct GitChangedFiles: View {
                 .textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Filter changed files")
             Text("Changed Files (\(files.count))")
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(palette.muted)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
@@ -241,7 +200,7 @@ private struct GitChangedFiles: View {
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 Text((file.path as NSString).lastPathComponent)
-                    .font(.caption.weight(.medium))
+                    .font(.callout.weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 HStack {
@@ -252,7 +211,7 @@ private struct GitChangedFiles: View {
                     Spacer(minLength: 0)
                     GitChangeCounts(file: file)
                 }
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(palette.muted)
             }
             .padding(6)

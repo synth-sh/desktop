@@ -16,6 +16,8 @@ struct ConversationView: View {
     @State private var composerController = ComposerController()
     @State private var workspaceHeight: CGFloat = 700
     @State private var showsGitChanges = false
+    @State private var windowWidth: CGFloat = 900
+    @AppStorage("gitReviewPaneWidth") private var gitReviewWidth = 0.0
 
     var body: some View {
         NavigationSplitView {
@@ -23,6 +25,7 @@ struct ConversationView: View {
         } detail: {
             workspace
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
         .overlay(alignment: .topTrailing) {
             if let alert = model.notifications.toast {
                 ConversationToast(alert: alert) {
@@ -68,9 +71,6 @@ struct ConversationView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.background)
         .foregroundStyle(palette.foreground)
-        .navigationTitle(conversationTitle)
-        .toolbar(removing: model.sessionID == nil ? nil : .title)
-        .toolbar { workspaceToolbar }
         .alert("Rename Conversation", isPresented: isPresenting($renameTarget)) {
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) {}
@@ -353,14 +353,20 @@ private extension String {
 
 private extension ConversationView {
     private var workspace: some View {
-        HSplitView {
-            detail.frame(minWidth: showsGitChanges && checkoutDirectory != nil ? 320 : 0)
-            if showsGitChanges, let checkoutDirectory {
+        ResizableTrailingPane(
+            savedWidth: $gitReviewWidth, isPresented: showsGitChanges && checkoutDirectory != nil,
+            defaultWidth: windowWidth * 0.4, minimumWidth: 285, minimumMainWidth: 245, dividerLabel: "Git pane width"
+        ) {
+            detail
+        } pane: {
+            if let checkoutDirectory {
                 GitReviewPane(directory: checkoutDirectory, turnCompletion: model.state?.status?.finished)
                     .id(checkoutDirectory)
-                    .frame(minWidth: 340, idealWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .navigationTitle(conversationTitle)
+        .toolbar(removing: model.sessionID == nil ? nil : .title)
+        .toolbar { workspaceToolbar }
     }
 
     private var checkoutDirectory: URL? {
@@ -377,7 +383,8 @@ private extension ConversationView {
             ToolbarItem(placement: .navigation) { titleMenu(for: identifier) }
         }
         if checkoutDirectory != nil {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarSpacer(.flexible, placement: .automatic)
+            ToolbarItem(placement: .automatic) {
                 Button(gitChangesAction, systemImage: "rectangle.split.2x1") {
                     showsGitChanges.toggle()
                 }

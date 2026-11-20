@@ -9,34 +9,36 @@ struct GitFilePatchView: View {
     @Binding var selection: GitChangedFile.ID?
     @State private var patch: GitPatch?
     @State private var error: String?
-    @State private var collapsed = false
+    @State private var showsFilePicker = false
+    @State private var showsActions = false
 
     var body: some View {
         VStack(spacing: 0) {
             fileHeader
             Divider()
-            if collapsed {
-                Button("Expand Diff", systemImage: "chevron.down") { collapsed = false }
-                    .buttonStyle(.borderless)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                patchBody
-            }
+            patchBody
         }
-        .task(id: collapsed) { if !collapsed, patch == nil { await loadPatch() } }
+        .task { await loadPatch() }
     }
 
     private var fileHeader: some View {
         HStack(spacing: 7) {
             if filePicker {
-                Menu {
-                    ForEach(changes.files) { candidate in
-                        Button(candidate.path) { selection = candidate.id }
+                ConversationDropdown(isPresented: $showsFilePicker, width: 275, arrowEdge: .bottom) {
+                    ConversationPopoverLabel(title: file.path)
+                } content: {
+                    Text("Changed Files").font(.headline)
+                    ConversationPopoverChoices(count: changes.files.count) {
+                        ForEach(changes.files) { candidate in
+                            Button {
+                                selection = candidate.id
+                                showsFilePicker = false
+                            } label: {
+                                ConversationPopoverChoice(title: candidate.path, selected: selection == candidate.id)
+                            }
+                            .help(candidate.path)
+                        }
                     }
-                } label: {
-                    Label(file.path, systemImage: "doc.text")
-                        .lineLimit(1)
-                        .truncationMode(.middle)
                 }
                 .accessibilityIdentifier("GitFilePicker")
                 .help(file.path)
@@ -58,21 +60,25 @@ struct GitFilePatchView: View {
     }
 
     private var fileMenu: some View {
-        Menu {
-            Button(collapsed ? "Expand" : "Collapse") { collapsed.toggle() }
-            Button("Open in Editor") {
-                if let url = changes.existingFileURL(for: file) { NSWorkspace.shared.open(url) }
-            }
-            .disabled(changes.existingFileURL(for: file) == nil)
-            Button("Copy Path") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(file.path, forType: .string)
-            }
-        } label: {
+        ConversationDropdown(isPresented: $showsActions, width: 185, arrowEdge: .bottom) {
             Image(systemName: "ellipsis")
                 .padding(.horizontal, 3)
+        } content: {
+            let url = changes.existingFileURL(for: file)
+            VStack(spacing: 3) {
+                Button("Open in Editor", systemImage: "arrow.up.forward.app") {
+                    showsActions = false
+                    if let url { NSWorkspace.shared.open(url) }
+                }
+                .disabled(url == nil)
+                Button("Copy Path", systemImage: "document.on.document") {
+                    showsActions = false
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(file.path, forType: .string)
+                }
+            }
+            .buttonStyle(ConversationPopoverRowStyle())
         }
-        .menuStyle(.borderlessButton)
         .fixedSize()
         .accessibilityLabel("File Actions")
         .help("File Actions")
@@ -81,13 +87,17 @@ struct GitFilePatchView: View {
     @ViewBuilder
     private var patchBody: some View {
         if let patch, !patch.hunks.isEmpty {
-            columns
+            if !patch.isNewFile { columns }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(patch.hunks.indices, id: \.self) { index in
                         let hunk = patch.hunks[index]
-                        hunkNote(hunk.header)
-                        SplitDiffView(path: file.path, rows: hunk.rows)
+                        if patch.isNewFile {
+                            AddedFileLines(path: file.path, lines: hunk.rows.compactMap(\.new))
+                        } else {
+                            hunkNote(hunk.header)
+                            SplitDiffView(path: file.path, rows: hunk.rows)
+                        }
                         if hunk.hasMissingNewline { hunkNote("No newline at end of file") }
                     }
                 }
@@ -97,13 +107,15 @@ struct GitFilePatchView: View {
                 "Couldn't Read Diff", systemImage: "exclamationmark.circle", description: Text(error)
             )
         } else if let patch {
-            ContentUnavailableView(
-                patch.isBinary || file.isBinary ? "Binary File" : "No Text Changes",
-                systemImage: "doc"
-            )
+            ContentUnavailableView(emptyTitle(for: patch), systemImage: "doc")
         } else {
             ProgressView("Reading diff…").frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func emptyTitle(for patch: GitPatch) -> String {
+        if patch.isBinary || file.isBinary { return "Binary File" }
+        return patch.isNewFile ? "Empty New File" : "No Text Changes"
     }
 
     private var columns: some View {

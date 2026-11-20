@@ -4,34 +4,26 @@ struct ModeControl: View {
     @Bindable var model: ConversationModel
 
     var body: some View {
-        Button { model.showModePicker.toggle() } label: {
+        ConversationDropdown(isPresented: $model.showModePicker) {
             ConversationPopoverLabel(title: modeLabel)
+        } content: {
+            Text("Mode").font(.headline)
+            VStack(spacing: 4) {
+                ForEach(model.modes) { mode in
+                    let selected = mode.id == model.state?.status?.agent
+                    Button {
+                        model.showModePicker = false
+                        Task { await model.selectMode(mode) }
+                    } label: {
+                        ConversationPopoverChoice(title: mode.name, selected: selected)
+                    }
+                }
+            }
+            .buttonStyle(ConversationPopoverRowStyle())
         }
         .accessibilityLabel("Mode")
         .accessibilityValue(modeLabel)
         .fixedSize()
-        .popover(isPresented: $model.showModePicker, arrowEdge: .top) {
-            ConversationPopover {
-                Text("Mode").font(.headline)
-                VStack(spacing: 4) {
-                    ForEach(model.modes) { mode in
-                        let selected = mode.id == model.state?.status?.agent
-                        Button {
-                            model.showModePicker = false
-                            Task { await model.selectMode(mode) }
-                        } label: {
-                            HStack {
-                                Text(mode.name)
-                                Spacer()
-                                if selected { Image(systemName: "checkmark").accessibilityHidden(true) }
-                            }
-                        }
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
-                }
-                .buttonStyle(ConversationPopoverRowStyle())
-            }
-        }
         .onChange(of: model.sessionID) { model.showModePicker = false }
     }
 
@@ -44,17 +36,14 @@ struct ConfigurationControls: View {
     @Bindable var model: ConversationModel
 
     var body: some View {
-        Button { model.showModelPicker.toggle() } label: {
+        ConversationDropdown(isPresented: $model.showModelPicker, width: 350) {
             ConversationPopoverLabel(title: modelLabel)
+        } content: {
+            Text("Models").font(.headline)
+            ModelBrowser(model: model) { model.showModelPicker = false }
         }
         .accessibilityLabel("Model and reasoning effort")
         .accessibilityValue(modelLabel)
-        .popover(isPresented: $model.showModelPicker, arrowEdge: .top) {
-            ConversationPopover(width: 350) {
-                Text("Models").font(.headline)
-                ModelBrowser(model: model) { model.showModelPicker = false }
-            }
-        }
         .onChange(of: model.sessionID) { model.showModelPicker = false }
     }
 

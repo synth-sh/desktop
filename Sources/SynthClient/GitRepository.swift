@@ -20,12 +20,29 @@ public struct GitRepository: Sendable {
 
     public var name: String { root.lastPathComponent }
 
-    public static func discover(at directory: URL) throws -> Self {
-        let location = GitCommand(directory: directory)
-        guard let path = try location.optionalText(["rev-parse", "--show-toplevel"], missing: 128) else {
-            throw GitReviewError.notRepository
+    public static func reviewRoots(in directory: URL) throws -> [URL] {
+        let containing = try root(at: directory)
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: Array(keys)
+        )) ?? []
+        let nested = try children.compactMap { child -> URL? in
+            try Task.checkCancellation()
+            guard let values = try? child.resourceValues(forKeys: keys), values.isDirectory == true,
+                  values.isSymbolicLink != true,
+                  FileManager.default.fileExists(atPath: child.appending(path: ".git").path) else { return nil }
+            let candidate = child.resolvingSymlinksInPath()
+            guard let root = try root(at: candidate), root.path == candidate.path,
+                  root.path != containing?.path else { return nil }
+            return root
         }
-        let root = URL(fileURLWithPath: path, isDirectory: true).resolvingSymlinksInPath()
+        return [containing].compactMap { $0 } + nested.sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
+    }
+
+    public static func discover(at directory: URL) throws -> Self {
+        guard let root = try root(at: directory) else { throw GitReviewError.notRepository }
         let git = GitCommand(directory: root)
         let head = try git.optionalText(["rev-parse", "--verify", "HEAD"], missing: 128)
         let current = try git.optionalText(["symbolic-ref", "--quiet", "HEAD"], missing: 1)
@@ -46,6 +63,11 @@ public struct GitRepository: Sendable {
             root: root, branch: current.map(displayName) ?? head.map { "Detached at " + $0.prefix(7) } ?? "Unborn HEAD",
             branches: branches, defaultComparison: comparison, head: head
         )
+    }
+
+    private static func root(at directory: URL) throws -> URL? {
+        let path = try GitCommand(directory: directory).optionalText(["rev-parse", "--show-toplevel"], missing: 128)
+        return path.map { URL(fileURLWithPath: $0, isDirectory: true).resolvingSymlinksInPath() }
     }
 
     private static func reviewBranches(_ git: GitCommand, excluding current: String?) throws -> [Branch] {
@@ -169,7 +191,7 @@ public enum GitReviewError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .notRepository: "This folder is outside a Git working tree."
+        case .notRepository: "No Git working tree was found in this folder or its immediate subfolders."
         case .unrelatedBranches: "The current checkout and this comparison branch have no common commit."
         case .readFailed: "Git could not read this comparison."
         case .outputTooLarge: "This Git output is too large to display."

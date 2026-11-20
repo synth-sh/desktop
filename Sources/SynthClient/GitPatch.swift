@@ -9,10 +9,12 @@ public struct GitPatch: Sendable {
 
     public let hunks: [Hunk]
     public let isBinary: Bool
+    public let isNewFile: Bool
 
     init(_ patch: Data) {
         var hunks: [Hunk] = []
         var binary = false
+        var newFile = false
         var pending: PendingHunk?
         for raw in patch.split(separator: 10) {
             // swiftlint:disable:next optional_data_string_conversion
@@ -24,11 +26,14 @@ public struct GitPatch: Sendable {
                 pending?.append(line)
             } else if line.hasPrefix("Binary files ") {
                 binary = true
+            } else if line.hasPrefix("new file mode ") {
+                newFile = true
             }
         }
         if let pending { hunks.append(pending.hunk) }
         self.hunks = hunks
         self.isBinary = binary
+        self.isNewFile = newFile
     }
 
     private struct PendingHunk {

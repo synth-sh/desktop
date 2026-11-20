@@ -1,5 +1,22 @@
 import SwiftUI
 
+struct ConversationDropdown<Trigger: View, Content: View>: View {
+    @Binding var isPresented: Bool
+    var width: CGFloat = 220
+    var arrowEdge: Edge = .top
+    @ViewBuilder let label: Trigger
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        Button { isPresented.toggle() } label: {
+            label
+        }
+        .popover(isPresented: $isPresented, arrowEdge: arrowEdge) {
+            ConversationPopover(width: width) { content }
+        }
+    }
+}
+
 struct ConversationPopoverLabel: View {
     @Environment(\.synthPalette) private var palette
     let title: String
@@ -30,6 +47,39 @@ struct ConversationPopover<Content: View>: View {
         .frame(width: width, alignment: .leading)
         .background(palette.surface)
         .foregroundStyle(palette.foreground)
+    }
+}
+
+struct ConversationPopoverChoice: View {
+    let title: String
+    let selected: Bool
+
+    var body: some View {
+        HStack {
+            Text(title).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 4)
+            if selected { Image(systemName: "checkmark").accessibilityHidden(true) }
+        }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+struct ConversationPopoverChoices<Content: View>: View {
+    let count: Int
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if count > 8 {
+            ScrollView { rows }
+                .frame(height: 280)
+        } else {
+            rows
+        }
+    }
+
+    private var rows: some View {
+        LazyVStack(spacing: 3) { content }
+            .buttonStyle(ConversationPopoverRowStyle())
     }
 }
 

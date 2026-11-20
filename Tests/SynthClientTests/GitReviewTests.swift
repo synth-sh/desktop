@@ -28,7 +28,9 @@ import Testing
     let committed = try repo.changes(comparedTo: repo.defaultComparison)
     #expect(Set(committed.files.map(\.path)) == ["App/Example.swift", "Old file.txt", "Binary.dat"])
     let tracked = try #require(committed.files.first { $0.path == "App/Example.swift" })
-    let hunk = try #require(try committed.patch(for: tracked).hunks.first)
+    let trackedPatch = try committed.patch(for: tracked)
+    #expect(!trackedPatch.isNewFile)
+    let hunk = try #require(trackedPatch.hunks.first)
     #expect(hunk.rows.first?.old?.text == "before")
     #expect(hunk.rows.first?.new?.text == "after")
     #expect(hunk.rows.last?.new?.newNumber == 2)
@@ -42,6 +44,7 @@ import Testing
     #expect(Set(working.files.map(\.path)) == ["App/Example.swift", "New staged.txt", ":notes\tfile.txt"])
     let untracked = try #require(working.files.first { $0.isUntracked })
     let untrackedPatch = try working.patch(for: untracked)
+    #expect(untrackedPatch.isNewFile)
     #expect(untrackedPatch.hunks.first?.rows.first?.old == nil)
     #expect(untrackedPatch.hunks.first?.rows.first?.new?.text == "note")
     #expect(working.existingFileURL(for: untracked)?.lastPathComponent == untracked.path)
@@ -62,18 +65,39 @@ import Testing
     let changes = try repository.changes(comparedTo: .workingTree)
     let draft = try #require(changes.files.first { $0.path == "Draft.txt" })
     let patch = try changes.patch(for: draft)
+    #expect(patch.isNewFile)
     #expect(patch.hunks.first?.rows.first?.new?.text == "unstaged")
     #expect(patch.hunks.first?.hasMissingNewline == true)
     #expect(!FileManager.default.fileExists(atPath: fixture.root.appending(path: "filter-ran").path))
 }
 
+@Test func discoversImmediateRepositoriesIncludingLinkedWorktrees() throws {
+    let parent = FileManager.default.temporaryDirectory.appending(path: "SynthGitParent-" + UUID().uuidString)
+        .resolvingSymlinksInPath()
+    defer { try? FileManager.default.removeItem(at: parent) }
+    let repository = try GitReviewFixture(root: parent.appending(path: "First", directoryHint: .isDirectory))
+    try repository.write("ready\n", to: "README.md")
+    try repository.git("add", ".")
+    try repository.git("commit", "-qm", "Start")
+    let linked = parent.appending(path: "Second", directoryHint: .isDirectory)
+    try repository.git("worktree", "add", "--quiet", "--detach", linked.path)
+    _ = try GitReviewFixture(root: parent.appending(path: "Group/TooDeep", directoryHint: .isDirectory))
+    _ = try GitReviewFixture(root: repository.root.appending(path: "Inner", directoryHint: .isDirectory))
+
+    let choices = try GitRepository.reviewRoots(in: parent)
+    #expect(choices.map(\.lastPathComponent) == ["First", "Second"])
+    #expect(try GitRepository.discover(at: linked).root.path == linked.path)
+    let nested = try GitRepository.reviewRoots(in: repository.root)
+    #expect(nested.map(\.lastPathComponent) == ["First", "Inner"])
+}
+
 private struct GitReviewFixture {
     let root: URL
 
-    init() throws {
-        root = FileManager.default.temporaryDirectory.appending(path: "SynthGit-" + UUID().uuidString)
+    init(root: URL? = nil) throws {
+        self.root = root ?? FileManager.default.temporaryDirectory.appending(path: "SynthGit-" + UUID().uuidString)
             .resolvingSymlinksInPath()
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: self.root, withIntermediateDirectories: true)
         try git("init", "-q", "-b", "main")
     }
 

@@ -37,6 +37,28 @@ struct SplitDiffView: View {
     }
 }
 
+struct AddedFileLines: View {
+    @Environment(\.synthPalette) private var palette
+    let path: String
+    let lines: [DiffLine]
+
+    var body: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(lines.indices, id: \.self) { index in
+                let line = lines[index]
+                HStack(alignment: .top, spacing: 0) {
+                    DiffGutter(number: line.newNumber)
+                    DiffCodeLine(line: line, path: path)
+                }
+                .background(palette.diffAddedBackground)
+            }
+        }
+        .font(.system(.caption, design: .monospaced))
+        .textSelection(.enabled)
+        .accessibilityIdentifier("AddedFileLines")
+    }
+}
+
 struct DiffGutter: View {
     @Environment(\.synthPalette) private var palette
     let number: Int?
