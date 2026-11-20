@@ -107,8 +107,7 @@ struct GitReviewHeader: View {
             case .workingTree: "Working changes"
             case .branch(let id): repository.branches.first { $0.id == id }?.name ?? id
             }
-        return ConversationDropdown(isPresented: $showsComparisons, width: 265, arrowEdge: .bottom)
-        {
+        return ConversationDropdown(isPresented: $showsComparisons, width: 265, arrowEdge: .bottom) {
             ConversationPopoverLabel(title: title)
         } content: {
             Text("Compare to").font(.headline)
