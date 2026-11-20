@@ -5,6 +5,7 @@ public struct SessionState: Sendable {
     public private(set) var skills: [Synth.Skill] = []
     public private(set) var status: Synth.Status?
     public private(set) var messages: [Synth.Message] = []
+    public private(set) var transcriptRevision = UUID()
     public private(set) var dropped: UInt64 = 0
     public private(set) var models: Synth.Models?
     public private(set) var notices: [String] = []
@@ -33,6 +34,7 @@ public struct SessionState: Sendable {
         skills = snapshot.skills?.found ?? []
         status = snapshot.status
         messages = snapshot.messages
+        transcriptRevision = UUID()
         dropped = snapshot.dropped
         streaming = snapshot.stream
         failure = nil
@@ -44,21 +46,26 @@ public struct SessionState: Sendable {
     }
 
     mutating func update(_ message: Synth.Message, appended: Bool) {
+        let messageChanged: Bool
         if let index = messages.lastIndex(where: { $0.seq == message.seq }) {
-            messages[index] = message
+            messageChanged = messages[index] != message
+            if messageChanged { messages[index] = message }
         } else if appended {
             messages.append(message)
+            messageChanged = true
             if message.role == "user", status?.isBusy == true, status?.steering.contains(message.text) == true {
                 steeringSequences.insert(message.seq)
             }
+        } else {
+            messageChanged = false
         }
         if appended && message.role == "assistant" { streaming = nil }
         let now = Date.now
-        if planUpdates[message.seq] == nil,
-           message.toolCalls.contains(where: { $0.name == "todo" && $0.status == "ok" }) {
-            planUpdates[message.seq] = now
-        }
+        let recordsPlanUpdate = planUpdates[message.seq] == nil &&
+            message.toolCalls.contains { $0.name == "todo" && $0.status == "ok" }
+        if recordsPlanUpdate { planUpdates[message.seq] = now }
         trackRunningTools(in: message, at: now)
+        if messageChanged || recordsPlanUpdate { transcriptRevision = UUID() }
     }
 
     private mutating func trackRunningTools(in message: Synth.Message, at date: Date) {

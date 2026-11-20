@@ -165,12 +165,13 @@ struct ConversationView: View {
         VStack(spacing: 0) {
             banners
             if let identifier = model.sessionID {
-                if model.messages.isEmpty, model.state?.stream == nil, model.interactions.isEmpty {
+                let transcript = model.transcript
+                if transcript.firstSequence == nil, model.state?.stream == nil, model.interactions.isEmpty {
                     emptyConversation
                 } else {
                     TranscriptView(
                         sessionID: identifier,
-                        messages: model.messages,
+                        transcript: transcript,
                         stream: model.state?.stream,
                         status: model.state?.status,
                         notices: model.state?.notices ?? [],

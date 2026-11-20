@@ -23,7 +23,8 @@ final class ConversationModel {
     var activity: [String: SynthClient.Activity] = [:]
     var loadingHistory: Set<String> = []
     var openedSessions: [String: OpenedConversation] = [:]
-    var historyBySession: [String: [Synth.Message]] = [:]
+    var historyBySession: [String: ConversationHistory] = [:]
+    @ObservationIgnored var cachedTranscript: ConversationTranscript?
     var drafts: [String: ComposerDraft] = [:]
     var importingAttachments: [String: Int] = [:]
     var failedDrafts: [String: [ComposerDraft]] = [:]

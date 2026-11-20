@@ -12,7 +12,7 @@ enum TranscriptAnchor: Hashable {
 
 struct TranscriptView: View {
     let sessionID: String
-    let messages: [Synth.Message]
+    let transcript: ConversationTranscript
     let stream: Synth.Stream?
     let status: Synth.Status?
     let notices: [String]
@@ -27,13 +27,6 @@ struct TranscriptView: View {
     @State private var position = ScrollPosition(idType: TranscriptAnchor.self)
     @State private var followUpdate: Task<Void, Never>?
 
-    private var rows: [TranscriptActivity.Row] {
-        TranscriptActivity.rows(
-            for: messages, busy: model.busy, planUpdates: model.state?.planUpdates ?? [:],
-            steeringSequences: model.state?.steeringSequences ?? []
-        )
-    }
-
     private var liveReasoning: Synth.Stream? {
         guard let stream, !stream.thinking.isEmpty else { return nil }
         return stream
@@ -41,27 +34,20 @@ struct TranscriptView: View {
 
     var body: some View {
         ScrollViewReader { reader in
-            transcript(reader)
+            scrollView(reader)
         }
         .onDisappear { followUpdate?.cancel() }
     }
 
-    private func transcript(_ reader: ScrollViewProxy) -> some View {
+    private func scrollView(_ reader: ScrollViewProxy) -> some View {
         ScrollView { transcriptContent(reader) }
         .defaultScrollAnchor(.bottom, for: .initialOffset)
         .defaultScrollAnchor(followsConversation ? .bottom : .top, for: .sizeChanges)
-        .scrollPosition($position)
-        .onChange(of: messages.last?.seq) {
+        .scrollPosition($position, anchor: .top)
+        .onChange(of: transcript.lastSequence) {
             if followsConversation, !userScrolling {
                 position.scrollTo(edge: .bottom)
                 followTail(using: reader)
-            }
-        }
-        .onScrollTargetVisibilityChange(idType: TranscriptAnchor.self, threshold: 0.01) { visible in
-            if followsConversation {
-                anchor = .tail
-            } else if let visibleRow = visible.first(where: { $0 != .tail }) {
-                anchor = visibleRow
             }
         }
         .onAppear {
@@ -89,16 +75,15 @@ struct TranscriptView: View {
                 followsConversation = geometry.contentSize.height - geometry.visibleRect.maxY <= bottomTolerance
             }
         }
-        .onChange(of: followsConversation) { _, following in
-            anchor = following ? .tail : position.viewID(type: TranscriptAnchor.self)
-        }
+        .onChange(of: position.viewID(type: TranscriptAnchor.self)) { saveAnchor() }
+        .onChange(of: followsConversation) { saveAnchor() }
         .overlay(alignment: .bottomTrailing) { jumpButton }
     }
 
     private func transcriptContent(_ reader: ScrollViewProxy) -> some View {
-        let rows = rows
+        let rows = transcript.rows
         return LazyVStack(alignment: .leading, spacing: 18) {
-            if model.hasOlderMessages {
+            if transcript.hasOlderMessages {
                 Button("Load Earlier Messages") { Task { await model.loadOlder() } }
                     .disabled(model.loadingHistory.contains(sessionID))
             }
@@ -131,6 +116,14 @@ struct TranscriptView: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity)
+    }
+
+    private func saveAnchor() {
+        if followsConversation {
+            if anchor != .tail { anchor = .tail }
+        } else if let top = position.viewID(type: TranscriptAnchor.self), top != .tail, top != anchor {
+            anchor = top
+        }
     }
 
     @ViewBuilder

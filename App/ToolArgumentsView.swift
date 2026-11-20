@@ -1,7 +1,7 @@
 import SwiftUI
 import SynthClient
 
-struct ToolArgumentsView: View {
+struct ToolArgumentsView: View, Equatable {
     let arguments: String
     let showsDiff: Bool
     var title: String?

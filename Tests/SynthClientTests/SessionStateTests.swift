@@ -14,6 +14,7 @@ import Testing
     let snapshot = try frames[0].parameters(Synth.Snapshot.self)
     var state = SessionState()
     state.replace(with: snapshot)
+    let initialRevision = state.transcriptRevision
     #expect(state.messages.map(\.text) == ["Hello"])
     for frame in frames[1...2] {
         let update = try frame.parameters(Synth.StreamUpdate.self)
@@ -21,18 +22,30 @@ import Testing
     }
     #expect(state.stream?.text == "Héllo")
     #expect(state.stream?.closed == true)
+    #expect(state.transcriptRevision == initialRevision)
 
     let final = try frames[3].parameters(Synth.MessageUpdate.self)
     state.update(final.message, appended: true)
+    let replyRevision = state.transcriptRevision
+    #expect(replyRevision != initialRevision)
     #expect(state.stream == nil)
     #expect(state.messages.map(\.text) == ["Hello", "Héllo"])
     state.update(final.message, appended: false)
     #expect(state.messages.count == 2)
     state.update(try frames[4].parameters(Synth.StatusUpdate.self).status)
+    #expect(state.transcriptRevision == replyRevision)
     #expect(state.status?.finished == 1)
     #expect(state.status?.isBusy == false)
 
+    var edited = final.message
+    edited.text += "!"
+    state.update(edited, appended: false)
+    let editedRevision = state.transcriptRevision
+    #expect(editedRevision != replyRevision)
+    #expect(state.messages.last?.text == "Héllo!")
+
     state.replace(with: snapshot)
+    #expect(state.transcriptRevision != editedRevision)
     #expect(state.messages.count == 1)
     #expect(state.stream == nil)
 }

@@ -2,14 +2,6 @@ import AppKit
 import SynthProtocol
 
 extension ConversationModel {
-    var messages: [Synth.Message] { olderMessages + (state?.messages ?? []) }
-    var hasOlderMessages: Bool { (state?.dropped ?? 0) > UInt64(olderMessages.count) }
-
-    private var olderMessages: [Synth.Message] {
-        guard let sessionID, let first = state?.messages.first?.seq else { return [] }
-        return historyBySession[sessionID, default: []].filter { $0.seq < first }
-    }
-
     static func isMissingSession(_ error: any Error) -> Bool {
         guard let rpc = error as? RPCError else { return false }
         return rpc.code == -32603 && rpc.message == "no such session"
@@ -130,15 +122,19 @@ extension ConversationModel {
     }
 
     func loadOlder() async {
-        guard let sessionID, let client, let first = messages.first, hasOlderMessages,
+        let transcript = transcript
+        guard let sessionID, let client, let first = transcript.firstSequence, transcript.hasOlderMessages,
               loadingHistory.insert(sessionID).inserted else { return }
         defer { loadingHistory.remove(sessionID) }
         do {
-            let page = try await client.history(before: first.seq, in: sessionID)
-            let existing = historyBySession[sessionID, default: []]
+            let page = try await client.history(before: first, in: sessionID)
+            let existing = historyBySession[sessionID]?.messages ?? []
             let seen = Set(existing.map(\.seq))
-            let loaded = page.filter { $0.seq < first.seq && !seen.contains($0.seq) }
-            historyBySession[sessionID] = (loaded + existing).sorted { $0.seq < $1.seq }
+            let loaded = page.filter { $0.seq < first && !seen.contains($0.seq) }
+            if !loaded.isEmpty {
+                let history = (loaded + existing).sorted { $0.seq < $1.seq }
+                historyBySession[sessionID] = ConversationHistory(messages: history)
+            }
         } catch {
             if self.sessionID == sessionID { self.error = error.localizedDescription }
         }

@@ -76,8 +76,9 @@ struct TranscriptActivityView: View {
                 let sequence = entry.id.sequence
                 let position = SessionState.ToolPosition(sequence: sequence, index: index)
                 let note = tool.status == "running" ? status?.toolNote(sequence: sequence, index: index) : nil
+                let startedAt = tool.status == "running" ? model.state?.runningTools[position] : nil
                 ToolActivity(
-                    tool: tool, note: note, startedAt: model.state?.runningTools[position],
+                    tool: tool, note: note, startedAt: startedAt,
                     load: resultLoader(tool, sequence: sequence, index: index)
                 )
             }
@@ -196,6 +197,7 @@ private struct ToolActivity: View {
                         arguments: tool.arguments, showsDiff: tool.name == "edit" || tool.name == "write",
                         result: tool.result, applied: tool.status == "ok"
                     )
+                    .equatable()
                     if tool.result?.isEmpty == false || load != nil {
                         ActivityDisclosure(title: "Output", expansion: nil) {
                             ExpandableActivityBody(preview: tool.result ?? "", load: load)
