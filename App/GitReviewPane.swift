@@ -5,6 +5,7 @@ struct GitReviewPane: View {
     @Environment(\.synthPalette) private var palette
     let directory: URL
     let turnCompletion: UInt64?
+    let isVisible: Bool
     @AppStorage("gitChangedFilesWidth") private var filesWidth = 0.0
     @State private var roots: [URL] = []
     @State private var selectedRoot: URL?
@@ -69,7 +70,9 @@ struct GitReviewPane: View {
             selected = nil
             filter = ""
         }
-        .task(id: ScanRequest(refresh: refresh, turnCompletion: turnCompletion)) { await scanRepositories() }
+        .task(id: isVisible ? ScanRequest(refresh: refresh, turnCompletion: turnCompletion) : nil) {
+            if isVisible { await scanRepositories() }
+        }
         .task(id: reviewRequest) {
             if let request = reviewRequest { await loadComparison(request) }
         }
@@ -103,9 +106,9 @@ struct GitReviewPane: View {
             selected = file
             if !docksFiles { showsFiles = false }
         })
-        return ResizableTrailingPane(
-            savedWidth: $filesWidth, isPresented: filesVisible,
-            defaultWidth: 215, minimumWidth: 150, minimumMainWidth: docksFiles ? 275 : 36,
+        return ResizableEdgePane(
+            savedSize: $filesWidth, isPresented: filesVisible,
+            defaultSize: 215, minimumSize: 150, minimumMainSize: docksFiles ? 275 : 36,
             dividerLabel: "Changed files width", overlaysMain: !docksFiles
         ) {
             GitFilePatchView(changes: changes, file: file, filePicker: !filesVisible, selection: $selected)

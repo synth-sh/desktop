@@ -58,9 +58,18 @@ into your draft. The composer keeps each conversation's draft and attachments
 separate. Conversation messages use the same Markdown styles as the composer.
 Select a linked file in a sent message to see the contents that went to the agent.
 
-Choose **Synth > Settings > Themes** to browse the bundled themes.
+Use **Show Workspace** in the toolbar to open Git Changes beside the
+conversation. Use **Add Tab** to open another Git Changes or Terminal tab.
+**Show Bottom Pane** opens a terminal below the top tabs. Both panes have
+their own tabs, and you can drag the divider between them to resize them.
+New terminals start in the current checkout or conversation directory.
+Hiding the workspace or the bottom pane keeps its terminals running.
+
+Choose **Synth > Settings > Appearance** to browse the bundled themes.
 Selecting a theme updates the conversation window immediately and saves your
-choice for the next launch.
+choice for the next launch. Enable **Match terminal background to app theme**
+to apply the theme's background to open and new terminals. Terminals use their
+default background until you enable it.
 
 Use **Synth > Settings > Models & MCP** (⌘,) to connect providers and manage
 MCP servers. Use the plus button next to model search to save an unlisted
