@@ -16,10 +16,10 @@ From the repository root:
 Scripts/build-app.sh
 ```
 
-The script fetches the engine revision pinned in `Engine.commit` from
-`synth-sh/synth`, builds it, and embeds it in the app. The first build needs
-network access for the engine and Swift packages. To use a compatible engine
-you built yourself, set `SYNTH_ENGINE` to its absolute path.
+The script initializes the `engine` Git submodule at the pinned commit, builds
+it, and embeds it in the app. The first build needs network access for the engine
+and Swift packages. To skip the submodule and use a compatible engine you built
+yourself, set `SYNTH_ENGINE` to its absolute path.
 
 Open `DerivedData/Build/Products/Release/Synth.app` in Finder. The app uses
 the same provider configuration and credentials as the terminal client.
@@ -31,8 +31,19 @@ successful run of the build script supplies the default engine at
 setting to another compatible engine. Xcode picks up new Swift files in
 `App/` automatically. Rerun XcodeGen after changing `project.yml`.
 
-The desktop version is set in `project.yml`. Update `Engine.commit`
-separately when adopting changes from the engine.
+The desktop version is set in `project.yml`. To adopt a new engine version,
+initialize the submodule if needed, then check out the desired tag or commit
+and stage the new pin before building:
+
+```sh
+git submodule update --init -- engine
+git -C engine fetch --tags
+git -C engine checkout --detach <tag-or-commit>
+git add engine
+Scripts/build-app.sh
+```
+
+Commit the updated `engine` pin after verifying the build.
 See [Releasing Synth Desktop](docs/releasing.md) for distribution.
 
 ## Using the app

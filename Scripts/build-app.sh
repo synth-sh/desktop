@@ -12,17 +12,9 @@ derived_data=$(CDPATH='' cd -- "$derived_data" && pwd)
 engine=${SYNTH_ENGINE:-"$derived_data/engine/bin/synth"}
 
 if [ -z "${SYNTH_ENGINE:-}" ]; then
-    engine_source="$derived_data/engine-source"
-    revision=$(cat "$desktop/Engine.commit")
-    if [ ! -d "$engine_source/.git" ]; then
-        git init -q "$engine_source"
-    fi
-    if ! git -C "$engine_source" cat-file -e "$revision^{commit}" 2>/dev/null; then
-        git -C "$engine_source" fetch --no-tags --depth=1 https://github.com/synth-sh/synth.git "$revision"
-    fi
-    git -C "$engine_source" checkout --quiet --detach "$revision"
+    git -C "$desktop" submodule update --init --checkout -- engine
     (
-        cd "$engine_source"
+        cd "$desktop/engine"
         "$zig" build -Doptimize=ReleaseSafe -Dtarget=aarch64-macos.26.0 --prefix "$derived_data/engine"
     )
 fi
