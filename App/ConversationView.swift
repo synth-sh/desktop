@@ -321,18 +321,18 @@ extension ConversationView {
         )
     }
 
+    @ViewBuilder
     private var connectionLabel: some View {
-        Label {
-            Text(connectionText).lineLimit(1)
-        } icon: {
-            if model.connection == .connected {
-                Image(systemName: "circle.fill").foregroundStyle(palette.success)
-            } else {
-                Image(systemName: "circle.dashed")
-            }
+        if model.connection == .connected && !model.isOpening {
+            Circle().fill(palette.success)
+                .frame(width: 8, height: 8).padding(4)
+                .accessibilityLabel("Connected")
+                .help(model.busy ? "Connected · \(connectionText)" : "Connected")
+        } else {
+            Label(connectionText, systemImage: "circle.dashed")
+                .lineLimit(1).font(.caption)
+                .foregroundStyle(palette.muted)
         }
-        .font(.caption)
-        .foregroundStyle(palette.muted)
     }
 
     private var connectionText: String {
@@ -367,6 +367,7 @@ private extension ConversationView {
         .navigationTitle(conversationTitle)
         .toolbar(removing: model.sessionID == nil ? nil : .title)
         .toolbar { workspaceToolbar }
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     }
 
     private var checkoutDirectory: URL? {

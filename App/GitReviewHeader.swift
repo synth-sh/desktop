@@ -16,25 +16,29 @@ struct GitReviewHeader: View {
     @State private var showsComparisons = false
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack {
+        HStack(alignment: .top, spacing: 13) {
+            VStack(alignment: .leading, spacing: 4) {
                 repositoryPicker
-                Spacer(minLength: 4)
-                Button("Refresh Git Changes", systemImage: "arrow.clockwise", action: refresh)
-                    .help("Refresh Git Changes")
-                Button(filesAction, systemImage: "sidebar.right", action: toggleFiles)
-                    .accessibilityLabel(filesAction)
-                    .help(filesAction)
-                    .disabled(!hasFiles)
+                if let repository {
+                    Text(repository.branch)
+                        .font(.caption)
+                        .foregroundStyle(palette.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(repository.branch)
+                        .accessibilityLabel("Current branch \(repository.branch)")
+                }
             }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
+            .frame(minWidth: 60, maxWidth: .infinity, alignment: .leading)
             if let repository {
                 comparisonControls(repository)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxWidth: 144, alignment: .leading)
+                    .layoutPriority(1)
             }
+            headerActions
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(palette.surface)
         .onChange(of: selectedRoot) { showsComparisons = false }
     }
@@ -46,6 +50,7 @@ struct GitReviewHeader: View {
         if roots.count > 1 {
             ConversationDropdown(isPresented: $showsRepositories, width: 250, arrowEdge: .bottom) {
                 ConversationPopoverLabel(title: selectedRoot?.lastPathComponent ?? "Repository")
+                    .truncationMode(.middle)
             } content: {
                 Text("Repository").font(.headline)
                 ConversationPopoverChoices(count: roots.count) {
@@ -61,6 +66,8 @@ struct GitReviewHeader: View {
                 }
             }
             .help(selectedRoot?.path ?? directory.path)
+            .font(.headline)
+            .buttonStyle(.plain)
             .accessibilityLabel("Repository")
             .accessibilityValue(selectedRoot?.lastPathComponent ?? "")
         } else {
@@ -73,19 +80,28 @@ struct GitReviewHeader: View {
         }
     }
 
+    private var headerActions: some View {
+        HStack(spacing: 10) {
+            Button("Refresh Git Changes", systemImage: "arrow.clockwise", action: refresh)
+                .help("Refresh Git Changes")
+            Button(filesAction, systemImage: "sidebar.right", action: toggleFiles)
+                .accessibilityLabel(filesAction)
+                .help(filesAction)
+                .disabled(!hasFiles)
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .fixedSize()
+    }
+
     private func comparisonControls(_ repository: GitRepository) -> some View {
         let selected = comparison ?? repository.defaultComparison
         let title = switch selected {
-        case .workingTree: "HEAD · Working changes"
+        case .workingTree: "Working changes"
         case .branch(let id): repository.branches.first { $0.id == id }?.name ?? id
         }
-        return VStack(alignment: .trailing, spacing: 3) {
-            Label(repository.branch, systemImage: "arrow.triangle.branch")
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(repository.branch)
-                .accessibilityLabel("Current branch \(repository.branch)")
-            Text("Compare to").font(.caption2)
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("Compare to").font(.caption).foregroundStyle(palette.muted)
             ConversationDropdown(isPresented: $showsComparisons, width: 265, arrowEdge: .bottom) {
                 ConversationPopoverLabel(title: title)
             } content: {
@@ -97,13 +113,12 @@ struct GitReviewHeader: View {
                     }
                 }
             }
-            .help(title)
+            .help(selected == .workingTree ? "Working changes against HEAD" : title)
             .accessibilityLabel("Compare to")
             .accessibilityValue(title)
             .accessibilityIdentifier("GitComparison")
         }
         .font(.callout)
-        .foregroundStyle(palette.muted)
     }
 
     private func compareOption(

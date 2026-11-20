@@ -16,7 +16,7 @@ struct ActivityDisclosure<Content: View, Trailing: View>: View {
     private var isExpanded: Bool { expansion?.wrappedValue ?? expanded }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             Button {
                 if let expansion { expansion.wrappedValue.toggle() } else { expanded.toggle() }
             } label: {
@@ -40,6 +40,7 @@ struct ActivityDisclosure<Content: View, Trailing: View>: View {
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(palette.muted)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isExpanded)
                         .frame(width: 12)
                         .accessibilityHidden(true)
                 }
@@ -49,12 +50,73 @@ struct ActivityDisclosure<Content: View, Trailing: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-            if isExpanded {
-                content.padding(.leading, icon == nil ? 4 : 21).padding(.bottom, 4)
-                    .transition(.opacity.combined(with: .offset(y: -4)))
+            DisclosureReveal(expanded: isExpanded, reduceMotion: reduceMotion) {
+                content.padding(.leading, icon == nil ? 4 : 21).padding(.vertical, 4)
             }
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: isExpanded)
+    }
+}
+
+private struct DisclosureReveal<Content: View>: View {
+    let expanded: Bool
+    let reduceMotion: Bool
+    @ViewBuilder let content: Content
+    @State private var mounted: Bool
+    @State private var fraction: CGFloat
+    @State private var revision = 0
+
+    init(expanded: Bool, reduceMotion: Bool, @ViewBuilder content: () -> Content) {
+        self.expanded = expanded
+        self.reduceMotion = reduceMotion
+        self.content = content()
+        _mounted = State(initialValue: expanded)
+        _fraction = State(initialValue: expanded ? 1 : 0)
+    }
+
+    var body: some View {
+        DisclosureHeight(fraction: fraction) {
+            if mounted { content }
+        }
+        .clipped()
+        .allowsHitTesting(expanded)
+        .accessibilityHidden(!expanded)
+        .onChange(of: expanded) { updateHeight() }
+    }
+
+    private func updateHeight() {
+        revision += 1
+        let current = revision
+        if reduceMotion {
+            mounted = expanded
+            fraction = expanded ? 1 : 0
+            return
+        }
+        if expanded { mounted = true }
+        withAnimation(.easeOut(duration: expanded ? 0.17 : 0.13)) {
+            fraction = expanded ? 1 : 0
+        } completion: {
+            if revision == current, !expanded { mounted = false }
+        }
+    }
+}
+
+private struct DisclosureHeight: Layout {
+    var fraction: CGFloat
+
+    var animatableData: CGFloat {
+        get { fraction }
+        set { fraction = newValue }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let measured = subviews.first?.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil)) ?? .zero
+        return CGSize(width: measured.width, height: measured.height * min(max(fraction, 0), 1))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(
+            at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: nil)
+        )
     }
 }
 

@@ -1,9 +1,10 @@
 import AppKit
 import SwiftUI
 
-struct ModelSearchField: NSViewRepresentable {
+struct PopoverSearchField: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
+    let label: String
     let autofocus: Bool
     let move: (Int) -> Void
     let submit: () -> Void
@@ -14,7 +15,7 @@ struct ModelSearchField: NSViewRepresentable {
         let field = SearchField(frame: .zero)
         field.autofocus = autofocus
         field.delegate = context.coordinator
-        field.setAccessibilityLabel("Search models")
+        field.setAccessibilityLabel(label)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return field
     }
@@ -38,9 +39,9 @@ struct ModelSearchField: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject, NSSearchFieldDelegate {
-        var parent: ModelSearchField
+        var parent: PopoverSearchField
 
-        init(_ parent: ModelSearchField) { self.parent = parent }
+        init(_ parent: PopoverSearchField) { self.parent = parent }
 
         func controlTextDidChange(_ notification: Notification) {
             if let field = notification.object as? NSSearchField {

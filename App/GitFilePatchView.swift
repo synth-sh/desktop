@@ -24,20 +24,13 @@ struct GitFilePatchView: View {
     private var fileHeader: some View {
         HStack(spacing: 7) {
             if filePicker {
-                ConversationDropdown(isPresented: $showsFilePicker, width: 275, arrowEdge: .bottom) {
+                ConversationDropdown(isPresented: $showsFilePicker, width: 330, arrowEdge: .bottom) {
                     ConversationPopoverLabel(title: file.path)
+                        .font(.callout.weight(.medium))
                 } content: {
-                    Text("Changed Files").font(.headline)
-                    ConversationPopoverChoices(count: changes.files.count) {
-                        ForEach(changes.files) { candidate in
-                            Button {
-                                selection = candidate.id
-                                showsFilePicker = false
-                            } label: {
-                                ConversationPopoverChoice(title: candidate.path, selected: selection == candidate.id)
-                            }
-                            .help(candidate.path)
-                        }
+                    GitFileBrowser(files: changes.files, selection: selection) { identifier in
+                        selection = identifier
+                        showsFilePicker = false
                     }
                 }
                 .accessibilityIdentifier("GitFilePicker")
