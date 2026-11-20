@@ -239,7 +239,7 @@ private struct QueuedSteering: View {
     var body: some View {
         if !messages.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Label("Queued steering", systemImage: "arrow.turn.down.right")
+                Label("Queued", systemImage: "arrow.turn.down.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(palette.accent)
                 ForEach(messages.indices, id: \.self) { index in

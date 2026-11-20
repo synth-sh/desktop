@@ -18,7 +18,14 @@ struct GitReviewHeader: View {
     var body: some View {
         HStack(alignment: .top, spacing: 13) {
             VStack(alignment: .leading, spacing: 4) {
-                repositoryPicker
+                HStack {
+                    repositoryPicker
+                    if let repository {
+                        comparisonControls(repository)
+                            .frame(maxWidth: 144, alignment: .leading)
+                            .layoutPriority(1)
+                    }
+                }
                 if let repository {
                     Text(repository.branch)
                         .font(.caption)
@@ -30,11 +37,6 @@ struct GitReviewHeader: View {
                 }
             }
             .frame(minWidth: 60, maxWidth: .infinity, alignment: .leading)
-            if let repository {
-                comparisonControls(repository)
-                    .frame(maxWidth: 144, alignment: .leading)
-                    .layoutPriority(1)
-            }
             headerActions
         }
         .padding(.horizontal, 12)
@@ -59,7 +61,8 @@ struct GitReviewHeader: View {
                             selectedRoot = root
                             showsRepositories = false
                         } label: {
-                            ConversationPopoverChoice(title: root.lastPathComponent, selected: root == selectedRoot)
+                            ConversationPopoverChoice(
+                                title: root.lastPathComponent, selected: root == selectedRoot)
                         }
                         .help(root.path)
                     }
@@ -71,12 +74,15 @@ struct GitReviewHeader: View {
             .accessibilityLabel("Repository")
             .accessibilityValue(selectedRoot?.lastPathComponent ?? "")
         } else {
-            Label(selectedRoot?.lastPathComponent ?? "Git Changes", systemImage: "arrow.triangle.branch")
-                .labelStyle(.titleAndIcon)
-                .font(.headline)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(selectedRoot?.path ?? directory.path)
+            Label(
+                selectedRoot?.lastPathComponent ?? "Git Changes",
+                systemImage: "arrow.triangle.branch"
+            )
+            .labelStyle(.titleAndIcon)
+            .font(.headline)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .help(selectedRoot?.path ?? directory.path)
         }
     }
 
@@ -96,29 +102,28 @@ struct GitReviewHeader: View {
 
     private func comparisonControls(_ repository: GitRepository) -> some View {
         let selected = comparison ?? repository.defaultComparison
-        let title = switch selected {
-        case .workingTree: "Working changes"
-        case .branch(let id): repository.branches.first { $0.id == id }?.name ?? id
-        }
-        return VStack(alignment: .leading, spacing: 2) {
-            Text("Compare to").font(.caption).foregroundStyle(palette.muted)
-            ConversationDropdown(isPresented: $showsComparisons, width: 265, arrowEdge: .bottom) {
-                ConversationPopoverLabel(title: title)
-            } content: {
-                Text("Compare to").font(.headline)
-                ConversationPopoverChoices(count: repository.branches.count + 1) {
-                    compareOption("Working changes against HEAD", value: .workingTree, current: selected)
-                    ForEach(repository.branches) { branch in
-                        compareOption(branch.name, value: .branch(branch.id), current: selected)
-                    }
+        let title =
+            switch selected {
+            case .workingTree: "Working changes"
+            case .branch(let id): repository.branches.first { $0.id == id }?.name ?? id
+            }
+        return ConversationDropdown(isPresented: $showsComparisons, width: 265, arrowEdge: .bottom)
+        {
+            ConversationPopoverLabel(title: title)
+        } content: {
+            Text("Compare to").font(.headline)
+            ConversationPopoverChoices(count: repository.branches.count + 1) {
+                compareOption(
+                    "Working changes against HEAD", value: .workingTree, current: selected)
+                ForEach(repository.branches) { branch in
+                    compareOption(branch.name, value: .branch(branch.id), current: selected)
                 }
             }
-            .help(selected == .workingTree ? "Working changes against HEAD" : title)
-            .accessibilityLabel("Compare to")
-            .accessibilityValue(title)
-            .accessibilityIdentifier("GitComparison")
         }
-        .font(.callout)
+        .help(selected == .workingTree ? "Working changes against HEAD" : title)
+        .accessibilityLabel("Compare to")
+        .accessibilityValue(title)
+        .accessibilityIdentifier("GitComparison")
     }
 
     private func compareOption(
