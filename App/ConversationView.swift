@@ -281,29 +281,7 @@ extension ConversationView {
     private var composerBox: some View {
         VStack(alignment: .leading, spacing: 9) {
             composerInput
-            HStack(spacing: 12) {
-                connectionLabel
-                ModeControl(model: model)
-                    .disabled(!model.canConfigure)
-                Spacer()
-                ConfigurationControls(model: model)
-                    .disabled(!model.canReadConfiguration)
-                if model.busy {
-                    Button("Stop", systemImage: "stop.fill") {
-                        Task { await model.stop() }
-                    }
-                    .disabled(!model.canStop)
-                }
-                Button {
-                    Task { await model.send() }
-                } label: {
-                    Label(model.busy ? "Steer" : "Send", systemImage: "arrow.up")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(SynthProminentButtonStyle())
-                .disabled(!model.canSend)
-                .help(model.busy ? "Steer (↩)" : "Send (↩)")
-            }
+            ComposerControls(model: model)
         }
         .padding(14)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: 16))
@@ -319,31 +297,6 @@ extension ConversationView {
             model: model, focused: $composerFocused, controller: composerController,
             maximumHeight: min(300, max(170, workspaceHeight * 0.40))
         )
-    }
-
-    @ViewBuilder
-    private var connectionLabel: some View {
-        if model.connection == .connected && !model.isOpening {
-            Circle().fill(palette.success)
-                .frame(width: 8, height: 8).padding(4)
-                .accessibilityLabel("Connected")
-                .help(model.busy ? "Connected · \(connectionText)" : "Connected")
-        } else {
-            Label(connectionText, systemImage: "circle.dashed")
-                .lineLimit(1).font(.caption)
-                .foregroundStyle(palette.muted)
-        }
-    }
-
-    private var connectionText: String {
-        if model.isOpening { return "Opening conversation…" }
-        if model.busy, let label = model.state?.status?.label, !label.isEmpty { return label }
-        switch model.connection {
-        case .connected: return model.busy ? "Working…" : "Connected"
-        case .connecting: return "Connecting…"
-        case .disconnecting: return "Disconnecting…"
-        case .failed, .disconnected: return "Disconnected"
-        }
     }
 }
 

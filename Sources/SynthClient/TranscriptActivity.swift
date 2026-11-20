@@ -45,15 +45,29 @@ public struct TranscriptActivity: Equatable, Identifiable, Sendable {
 
     public var completedCount: Int { steps.filter { $0.status == .done }.count }
     public var currentStep: Step? { steps.first { $0.id == activeStep } }
+    public var planCopyText: String? { Self.planMarkdown(plan) }
+
+    private var plan: [Synth.PlanStep] { steps.map { .init(text: $0.text, status: $0.status) } }
 
     public enum Row: Equatable, Identifiable, Sendable {
-        case message(Synth.Message)
+        case message(Synth.Message, plan: [Synth.PlanStep] = [])
         case activity(TranscriptActivity)
 
         public var id: Identifier {
             switch self {
-            case .message(let message): .message(message.seq)
+            case .message(let message, _): .message(message.seq)
             case .activity(let activity): activity.id
+            }
+        }
+
+        public var messageCopyText: String? {
+            guard case .message(let message, let plan) = self, !message.text.isEmpty else { return nil }
+            switch message.role {
+            case "user": return message.text
+            case "assistant" where message.toolCalls.isEmpty:
+                guard let planText = TranscriptActivity.planMarkdown(plan) else { return message.text }
+                return message.text + "\n\n" + planText
+            default: return nil
             }
         }
     }
@@ -74,7 +88,7 @@ public struct TranscriptActivity: Equatable, Identifiable, Sendable {
                     current.finished = true
                     rows.append(.activity(current))
                     activity = nil
-                    rows.append(.message(message))
+                    rows.append(.message(message, plan: current.plan))
                 }
             case "assistant", "user", "summary":
                 var continuation: Self?
@@ -85,7 +99,7 @@ public struct TranscriptActivity: Equatable, Identifiable, Sendable {
                         continuation = current.continued(after: message.seq)
                     }
                 }
-                rows.append(.message(message))
+                rows.append(.message(message, plan: message.role == "assistant" ? activity?.plan ?? [] : []))
                 activity = continuation
             default:
                 continue
@@ -99,6 +113,16 @@ public struct TranscriptActivity: Equatable, Identifiable, Sendable {
     }
 
     public static func streaming(request: UInt64) -> Self { Self(id: .stream(request)) }
+
+    private static func planMarkdown(_ plan: [Synth.PlanStep]) -> String? {
+        guard !plan.isEmpty else { return nil }
+        let checklist = plan.map { step in
+            let checkbox = step.status == .done ? "[x]" : "[ ]"
+            let status = step.status == .active ? " (in progress)" : ""
+            return "- \(checkbox) \(step.text)\(status)"
+        }
+        return (["## Plan", ""] + checklist).joined(separator: "\n")
+    }
 
     private func continued(after sequence: UInt64) -> Self {
         var continuation = Self(id: .activity(sequence))

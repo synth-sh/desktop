@@ -41,6 +41,20 @@ extension ACP {
 }
 
 extension Synth {
+    public enum ApprovalMode: String, Codable, CaseIterable, Sendable {
+        case ask, auto, all
+    }
+
+    public struct SetApprovalMode: Encodable, Sendable {
+        public let sessionId: String
+        public let mode: ApprovalMode
+
+        public init(sessionID: String, mode: ApprovalMode) {
+            sessionId = sessionID
+            self.mode = mode
+        }
+    }
+
     public struct Model: Decodable, Equatable, Identifiable, Sendable {
         public let name: String
         public let provider: String

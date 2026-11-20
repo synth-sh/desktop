@@ -171,8 +171,8 @@ struct TranscriptView: View {
     @ViewBuilder
     private func transcriptRow(_ row: TranscriptActivity.Row, last: TranscriptActivity.ID?) -> some View {
         switch row {
-        case .message(let message):
-            TranscriptRow(message: message, sessionID: sessionID, model: model)
+        case .message(let message, _):
+            TranscriptRow(message: message, copyText: row.messageCopyText, sessionID: sessionID, model: model)
                 .id(TranscriptAnchor.message(message.seq))
         case .activity(let activity):
             if case .activity(let sequence) = activity.id {
@@ -203,6 +203,7 @@ struct TranscriptNotices: View {
 private struct TranscriptRow: View {
     @Environment(\.synthPalette) private var palette
     let message: Synth.Message
+    let copyText: String?
     let sessionID: String
     let model: ConversationModel
 
@@ -212,7 +213,12 @@ private struct TranscriptRow: View {
             case "user":
                 VStack(alignment: .leading, spacing: 6) {
                     Text("You").font(.caption.weight(.semibold)).foregroundStyle(palette.muted)
+                        .frame(height: 20)
+                        .padding(.trailing, 28)
                     UserMessageBody(message: message, sessionID: sessionID, model: model)
+                }
+                .overlay(alignment: .topTrailing) {
+                    UserMessageCopyButton(text: copyText, message: message, sessionID: sessionID, model: model)
                 }
                 .padding(13)
                 .background(palette.surface, in: RoundedRectangle(cornerRadius: 12))
@@ -222,6 +228,7 @@ private struct TranscriptRow: View {
                 if !message.text.isEmpty {
                     MarkdownView(text: message.text, identifier: "\(sessionID):\(message.seq)")
                 }
+                if let copyText { MessageCopyButton(text: copyText) }
             case "summary":
                 Text(message.text).font(.caption).foregroundStyle(palette.muted).textSelection(.enabled)
             default:
@@ -243,7 +250,10 @@ private struct QueuedSteering: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(palette.accent)
                 ForEach(messages.indices, id: \.self) { index in
-                    Text(verbatim: messages[index]).textSelection(.enabled)
+                    HStack(alignment: .top, spacing: 6) {
+                        Text(verbatim: messages[index]).textSelection(.enabled)
+                        MessageCopyButton(text: messages[index])
+                    }
                 }
             }
             .padding(10)

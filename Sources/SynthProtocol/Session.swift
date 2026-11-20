@@ -207,6 +207,7 @@ public enum Synth {
         public let project: String
         public let branch: String
         public let agent: String
+        private let approvalModeName: String?
         public let model: String
         public let provider: String
         public let providerID: String
@@ -227,6 +228,7 @@ public enum Synth {
         public let notes: [WireText]?
 
         public var isBusy: Bool { state != "idle" }
+        public var approvalMode: ApprovalMode? { approvalModeName.flatMap(ApprovalMode.init(rawValue:)) }
 
         public func toolNote(sequence: UInt64, index: Int) -> String? {
             guard sequence == pendingSequence, let notes, notes.indices.contains(index),
@@ -242,6 +244,7 @@ public enum Synth {
             case project
             case branch
             case agent
+            case approvalModeName = "approval_mode"
             case model
             case provider
             case providerID = "provider_id"

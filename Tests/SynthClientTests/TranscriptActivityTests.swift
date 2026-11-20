@@ -31,7 +31,7 @@ import Testing
     #expect(!running.finished)
 
     let final = TranscriptActivity.rows(for: messages, busy: true)
-    guard case .activity(let finished) = final[1], case .message(let reply) = final[2] else {
+    guard case .activity(let finished) = final[1], case .message(let reply, _) = final[2] else {
         Issue.record("Expected a plan followed by the final reply")
         return
     }
@@ -64,13 +64,40 @@ import Testing
         message(3, calls: [call("bash", #"{"command":"swift test"}"#)])
     ]
     let rows = TranscriptActivity.rows(for: messages, busy: true, steeringSequences: [2])
-    guard rows.count == 3, case .message(let steering) = rows[1], case .activity(let continuation) = rows[2] else {
+    guard rows.count == 3, case .message(let steering, _) = rows[1], case .activity(let continuation) = rows[2] else {
         Issue.record("Expected the steering message followed by a plan continuation")
         return
     }
     #expect(steering.text == "Check the tests too")
     #expect(continuation.currentStep?.text == "Inspect")
     #expect(continuation.currentStep?.entries.map(\.id.sequence) == [3])
+}
+
+@Test func copiesOnlyUserTextOrTheFinalReplyWithItsCurrentPlan() throws {
+    let plan = #"{"items":[{"text":"Read","status":"done"},{"text":"Edit","status":"active"},"Check"]}"#
+    let messages = try [
+        message(1, role: "user", text: "Check **this**"),
+        message(2, text: "Intermediate commentary", thinking: "Internal reasoning", calls: [
+            call("todo", #"{"items":["Replaced step"]}"#),
+            call("mcp_fixture", #"{"hidden":"arguments"}"#),
+            call("bash", #"{"command":"printf hidden"}"#)
+        ]),
+        message(3, role: "tool", text: "Hidden tool result"),
+        message(4, calls: [call("todo", plan)]),
+        message(5, text: "The **final** reply.\n", thinking: "Final private reasoning"),
+        message(6, role: "user", text: "Next"),
+        message(7, text: "A reply with no plan.")
+    ]
+    let rows = TranscriptActivity.rows(for: messages, busy: false)
+    let checklist = "## Plan\n\n- [x] Read\n- [ ] Edit (in progress)\n- [ ] Check"
+    #expect(rows.compactMap(\.messageCopyText) == [
+        "Check **this**", "The **final** reply.\n\n\n" + checklist, "Next", "A reply with no plan."
+    ])
+    guard case .activity(let activity) = rows[1] else {
+        Issue.record("Expected an activity row")
+        return
+    }
+    #expect(activity.planCopyText == checklist)
 }
 
 @Test func previewsFileChangesWithOnlyKnownLineNumbers() throws {

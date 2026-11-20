@@ -18,6 +18,7 @@ struct TranscriptActivityView: View {
     private var hasPlan: Bool { !activity.steps.isEmpty }
 
     var body: some View {
+        let copyText = activity.planCopyText
         ActivityDisclosure(
             title: title,
             icon: hasPlan ? "checklist" : "waveform.path",
@@ -43,6 +44,10 @@ struct TranscriptActivityView: View {
                 }
             }
             .padding(.top, 2)
+        }
+        .padding(.trailing, copyText == nil ? 0 : 27)
+        .overlay(alignment: .topTrailing) {
+            if let copyText { MessageCopyButton(text: copyText, label: "Copy plan") }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

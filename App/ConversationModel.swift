@@ -355,17 +355,11 @@ extension ConversationModel {
         } catch {}
     }
 
-    func selectMode(_ mode: ACP.Mode) async {
-        guard canConfigure, let sessionID else { return }
-        do {
-            try await configure(in: sessionID) { try await $0.setMode(mode.id, in: $1) }
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-
-    func configure(in session: String, _ operation: (SynthClient, String) async throws -> Void) async throws {
-        guard canConfigure, sessionID == session, let client else { throw ConfigurationUnavailable() }
+    func configure(
+        in session: String, whileBusy: Bool = false, _ operation: (SynthClient, String) async throws -> Void
+    ) async throws {
+        guard canReadConfiguration, !isUpdatingConfiguration, whileBusy || !busy,
+              sessionID == session, let client else { throw ConfigurationUnavailable() }
         isUpdatingConfiguration = true
         defer { isUpdatingConfiguration = false }
         do {

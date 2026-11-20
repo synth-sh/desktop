@@ -59,6 +59,9 @@ class Handler(BaseHTTPRequestHandler):
         delta = {"content": "Fixture complete: " + str(prompt)[:120]}
         finish = "stop"
 
+        if messages[0].get("content", "").startswith("You review actions an AI coding agent"):
+            delta = {"content": "BLOCK\nVERDICT: BLOCK: Fixture denied this call"}
+
         if isinstance(prompt, str) and prompt.startswith("verify fixture attachments"):
             image_urls = [block["image_url"]["url"] for block in parts if block["type"] == "image_url"]
             valid = (
@@ -81,6 +84,7 @@ class Handler(BaseHTTPRequestHandler):
                     {"path": "denied.txt", "content": "denied"},
                 ),
                 "always allow fixture command": ("bash", {"command": "printf fixture"}),
+                "block fixture auto approval": ("bash", {"command": "printf 'fixture should not run'"}),
                 "read fixture bytes": ("read", {"path": "legacy.txt"}),
                 "ask fixture choice": (
                     "ask_user",
