@@ -57,6 +57,7 @@ struct RichComposer: View {
 
     private var editor: some View {
         let session = model.sessionID ?? "none"
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
         var configuration = MarkdownPresentation.configuration(palette, colorScheme: colorScheme)
         configuration.services.bus = controller.bus
         return NativeTextViewWrapper(
@@ -65,7 +66,8 @@ struct RichComposer: View {
                 set: { model.drafts[session, default: .init()].markdown = $0 }
             ),
             configuration: configuration,
-            fontSize: NSFont.systemFontSize,
+            fontName: font.fontName,
+            fontSize: font.pointSize,
             documentId: session,
             isEditable: model.sessionID != nil,
             isFocused: $focused,
@@ -89,13 +91,21 @@ struct RichComposer: View {
                     return true
                 }
             ),
-            placeholder: NSAttributedString(
-                string: model.busy ? "Steer the conversation" : "Message Synth",
-                attributes: [.foregroundColor: NSColor(palette.muted)]
-            )
+            placeholder: placeholder(font: font, lineSpacing: configuration.paragraph.lineHeightExtraSpacing)
         )
         .frame(height: min(controller.height, maximumHeight))
         .accessibilityLabel("Message")
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in controller.revealCaret(in: session) }
+        .onChange(of: model.composerDraft.markdown) { controller.revealCaret(in: session) }
+    }
+
+    private func placeholder(font: NSFont, lineSpacing: CGFloat) -> NSAttributedString {
+        let style = NSMutableParagraphStyle()
+        style.minimumLineHeight = ceil(font.ascender - font.descender + font.leading) + lineSpacing
+        return NSAttributedString(
+            string: model.busy ? "Steer the conversation" : "Ask a question or describe a task",
+            attributes: [.font: font, .paragraphStyle: style, .foregroundColor: NSColor(palette.muted)]
+        )
     }
 
     private func loadFiles(in session: String) async {

@@ -15,12 +15,13 @@ struct ConversationView: View {
     @State private var composerFocused = false
     @State private var composerController = ComposerController()
     @State private var workspaceHeight: CGFloat = 700
+    @State private var showsGitChanges = false
 
     var body: some View {
         NavigationSplitView {
             ProjectSidebar(model: model)
         } detail: {
-            detail
+            workspace
         }
         .overlay(alignment: .topTrailing) {
             if let alert = model.notifications.toast {
@@ -69,11 +70,7 @@ struct ConversationView: View {
         .foregroundStyle(palette.foreground)
         .navigationTitle(conversationTitle)
         .toolbar(removing: model.sessionID == nil ? nil : .title)
-        .toolbar {
-            if let identifier = model.sessionID {
-                ToolbarItem(placement: .navigation) { titleMenu(for: identifier) }
-            }
-        }
+        .toolbar { workspaceToolbar }
         .alert("Rename Conversation", isPresented: isPresenting($renameTarget)) {
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) {}
@@ -350,33 +347,46 @@ extension ConversationView {
     }
 }
 
-private struct CheckoutContext: View {
-    @Environment(\.synthPalette) private var palette
-    let root: String
-    let branch: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Label((root as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
-                .truncationMode(.middle)
-                .help(root)
-                .accessibilityLabel("Working directory \(root)")
-            if !branch.isEmpty {
-                Label(branch, systemImage: "arrow.triangle.branch")
-                    .help(branch)
-                    .accessibilityLabel("Git branch \(branch)")
-            }
-            Spacer(minLength: 0)
-        }
-        .font(.caption)
-        .lineLimit(1)
-        .foregroundStyle(palette.muted)
-        .frame(maxWidth: 780)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 8)
-    }
-}
-
 private extension String {
     var nonEmpty: String? { isEmpty ? nil : self }
+}
+
+private extension ConversationView {
+    private var workspace: some View {
+        HSplitView {
+            detail.frame(minWidth: showsGitChanges && checkoutDirectory != nil ? 320 : 0)
+            if showsGitChanges, let checkoutDirectory {
+                GitReviewPane(directory: checkoutDirectory, turnCompletion: model.state?.status?.finished)
+                    .id(checkoutDirectory)
+                    .frame(minWidth: 340, idealWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    private var checkoutDirectory: URL? {
+        guard model.sessionID != nil else { return nil }
+        if let status = model.state?.status, !status.root.isEmpty, model.project != nil || !status.branch.isEmpty {
+            return URL(fileURLWithPath: status.root, isDirectory: true).standardizedFileURL
+        }
+        return model.project
+    }
+
+    @ToolbarContentBuilder
+    var workspaceToolbar: some ToolbarContent {
+        if let identifier = model.sessionID {
+            ToolbarItem(placement: .navigation) { titleMenu(for: identifier) }
+        }
+        if checkoutDirectory != nil {
+            ToolbarItem(placement: .primaryAction) {
+                Button(gitChangesAction, systemImage: "rectangle.split.2x1") {
+                    showsGitChanges.toggle()
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel(gitChangesAction)
+                .help(gitChangesAction)
+            }
+        }
+    }
+
+    var gitChangesAction: String { showsGitChanges ? "Hide Git Changes" : "Show Git Changes" }
 }

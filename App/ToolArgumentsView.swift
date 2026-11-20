@@ -28,16 +28,10 @@ struct ToolArgumentsView: View {
 
 private struct ToolDiffView: View {
     @Environment(\.synthPalette) private var palette
-    @Environment(\.colorScheme) private var colorScheme
     let change: ToolFileChange
     let applied: Bool
     @State private var showAll = false
     private let previewCount = 14
-
-    private struct Pair {
-        let old: ToolFileChange.Line?
-        let new: ToolFileChange.Line?
-    }
 
     private var lineCount: Int { change.hunks.reduce(0) { $0 + $1.lines.count } }
 
@@ -80,7 +74,7 @@ private struct ToolDiffView: View {
 
     private func hunk(_ lines: ArraySlice<ToolFileChange.Line>) -> some View {
         ViewThatFits(in: .horizontal) {
-            split(lines).frame(minWidth: 560)
+            SplitDiffView(path: change.path, rows: SplitDiffRow.pair(lines)).frame(minWidth: 560)
             unified(lines)
         }
         .clipShape(.rect(cornerRadius: 5))
@@ -92,111 +86,14 @@ private struct ToolDiffView: View {
             ForEach(lines.indices, id: \.self) { index in
                 let line = lines[index]
                 HStack(alignment: .top, spacing: 0) {
-                    gutter(line.oldNumber)
-                    gutter(line.newNumber)
-                    code(line)
+                    DiffGutter(number: line.oldNumber)
+                    DiffGutter(number: line.newNumber)
+                    DiffCodeLine(line: line, path: change.path)
                 }
-                .background(background(for: line.kind))
+                .background(line.kind.diffBackground(palette))
             }
         }
         .textSelection(.enabled)
         .accessibilityIdentifier("UnifiedDiff")
-    }
-
-    private func split(_ lines: ArraySlice<ToolFileChange.Line>) -> some View {
-        let pairs = sideBySide(lines)
-        return LazyVStack(spacing: 0) {
-            ForEach(pairs.indices, id: \.self) { index in
-                let pair = pairs[index]
-                HStack(alignment: .top, spacing: 1) {
-                    side(pair.old, number: pair.old?.oldNumber)
-                    side(pair.new, number: pair.new?.newNumber)
-                }
-                .background(palette.border)
-            }
-        }
-        .textSelection(.enabled)
-        .accessibilityIdentifier("SplitDiff")
-    }
-
-    private func sideBySide(_ lines: ArraySlice<ToolFileChange.Line>) -> [Pair] {
-        var pairs: [Pair] = []
-        var removed: [ToolFileChange.Line] = []
-        var added: [ToolFileChange.Line] = []
-        func flush() {
-            for index in 0..<max(removed.count, added.count) {
-                pairs.append(Pair(
-                    old: index < removed.count ? removed[index] : nil,
-                    new: index < added.count ? added[index] : nil
-                ))
-            }
-            removed.removeAll(keepingCapacity: true)
-            added.removeAll(keepingCapacity: true)
-        }
-        for line in lines {
-            switch line.kind {
-            case .context:
-                flush()
-                pairs.append(.init(old: line, new: line))
-            case .removal: removed.append(line)
-            case .addition: added.append(line)
-            }
-        }
-        flush()
-        return pairs
-    }
-
-    private func side(_ line: ToolFileChange.Line?, number: Int?) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            gutter(number)
-            if let line { code(line) } else { Color.clear.frame(height: 18) }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(line.map { background(for: $0.kind) } ?? palette.surface)
-    }
-
-    private func gutter(_ number: Int?) -> some View {
-        Text(number.map(String.init) ?? "")
-            .foregroundStyle(palette.muted)
-            .padding(.vertical, 2)
-            .frame(minWidth: 36, alignment: .trailing)
-            .padding(.trailing, 6)
-    }
-
-    private func code(_ line: ToolFileChange.Line) -> some View {
-        let sign = switch line.kind {
-        case .context: " "
-        case .removal: "−"
-        case .addition: "+"
-        }
-        let color = switch line.kind {
-        case .context: palette.foreground
-        case .removal: palette.diffRemovedForeground
-        case .addition: palette.diffAddedForeground
-        }
-        return HStack(alignment: .top, spacing: 5) {
-            Text(sign).accessibilityHidden(true)
-            codeText(line.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .foregroundStyle(color)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-    }
-
-    private func codeText(_ text: String) -> Text {
-        if let highlighted = MarkdownPresentation.highlightedLine(text, path: change.path, colorScheme: colorScheme) {
-            return Text(highlighted)
-        }
-        return Text(verbatim: text.isEmpty ? " " : text)
-    }
-
-    private func background(for kind: ToolFileChange.Kind) -> Color {
-        switch kind {
-        case .context: palette.background
-        case .removal: palette.diffRemovedBackground
-        case .addition: palette.diffAddedBackground
-        }
     }
 }

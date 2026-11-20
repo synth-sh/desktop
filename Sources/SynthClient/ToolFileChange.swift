@@ -1,14 +1,8 @@
 import Foundation
 
 public struct ToolFileChange: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case context, removal, addition }
-
-    public struct Line: Equatable, Sendable {
-        public let kind: Kind
-        public let text: String
-        public let oldNumber: Int?
-        public let newNumber: Int?
-    }
+    public typealias Kind = DiffLine.Kind
+    public typealias Line = DiffLine
 
     public struct Hunk: Equatable, Sendable {
         public let lines: [Line]

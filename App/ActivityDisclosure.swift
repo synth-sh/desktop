@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ActivityDisclosure<Content: View, Trailing: View>: View {
     @Environment(\.synthPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     var icon: String?
     var tint: Color?
@@ -35,9 +36,10 @@ struct ActivityDisclosure<Content: View, Trailing: View>: View {
                         Text(detail).font(.caption).foregroundStyle(palette.muted)
                     }
                     trailing.fixedSize()
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(palette.muted)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .frame(width: 12)
                         .accessibilityHidden(true)
                 }
@@ -49,8 +51,10 @@ struct ActivityDisclosure<Content: View, Trailing: View>: View {
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             if isExpanded {
                 content.padding(.leading, icon == nil ? 4 : 21).padding(.bottom, 4)
+                    .transition(.opacity.combined(with: .offset(y: -4)))
             }
         }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: isExpanded)
     }
 }
 
@@ -71,7 +75,7 @@ struct ActivityDuration: View {
     var body: some View {
         let seconds = milliseconds / 1_000
         let label: String = if milliseconds < 1_000 {
-            "<1s"
+            "\(milliseconds) ms"
         } else if seconds < 60 {
             "\(seconds)s"
         } else {
