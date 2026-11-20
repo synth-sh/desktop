@@ -191,7 +191,7 @@ private struct ToolActivity: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            ActivityDisclosure(title: title, icon: icon, tint: tint, detail: statusLabel) {
+            ActivityDisclosure(title: title, icon: icon) {
                 VStack(alignment: .leading, spacing: 8) {
                     ToolArgumentsView(
                         arguments: tool.arguments, showsDiff: tool.name == "edit" || tool.name == "write",
@@ -206,10 +206,16 @@ private struct ToolActivity: View {
                     }
                 }
             } trailing: {
-                if let elapsed = tool.elapsedMilliseconds {
-                    ActivityDuration(milliseconds: elapsed)
-                } else if tool.status == "running", let startedAt {
-                    RunningDuration(start: startedAt)
+                HStack(spacing: 7) {
+                    if let elapsed = tool.elapsedMilliseconds {
+                        ActivityDuration(milliseconds: elapsed)
+                    } else if tool.status == "running", let startedAt {
+                        RunningDuration(start: startedAt)
+                    }
+                    Circle().fill(statusColor)
+                        .frame(width: 7, height: 7)
+                        .accessibilityLabel(statusLabel)
+                        .help(statusLabel)
                 }
             }
             if let note {
@@ -223,12 +229,14 @@ private struct ToolActivity: View {
     }
 
     private var title: String {
-        let targetKeys = ["path", "command", "pattern", "url", "query", "prompt", "question"]
+        let targetKeys = tool.name == "skill"
+            ? ["name"] : ["path", "command", "pattern", "url", "query", "prompt", "question"]
         let input = try? JSONSerialization.jsonObject(with: Data(tool.arguments.utf8)) as? [String: Any]
         let target = targetKeys.lazy.compactMap { input?[$0] as? String }
             .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let action = switch tool.name {
         case "bash", "shell": "Run"
+        case "skill": "Load skill"
         case "todo": "Update plan"
         case "web_search": "Search web"
         case "web_fetch": "Fetch"
@@ -248,15 +256,17 @@ private struct ToolActivity: View {
         case "grep", "glob", "web_search": "magnifyingglass"
         case "web_fetch": "globe"
         case "todo": "checklist"
+        case "skill": "puzzlepiece.extension"
         default: tool.name.hasPrefix("mcp") ? "puzzlepiece.extension" : "wrench"
         }
     }
 
-    private var tint: Color {
+    private var statusColor: Color {
         switch tool.status {
-        case "running": palette.accent
+        case "running": Synth.PlanStep.Status.active.planColor(palette)
+        case "ok": Synth.PlanStep.Status.done.planColor(palette)
         case "failed", "rejected": palette.danger
-        default: palette.muted
+        default: Synth.PlanStep.Status.pending.planColor(palette)
         }
     }
 

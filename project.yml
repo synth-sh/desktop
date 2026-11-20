@@ -9,7 +9,7 @@ packages:
     path: .
   MarkdownEngine:
     url: https://github.com/synth-sh/swift-markdown-engine.git
-    revision: "c991a9f5341f6672f148c24955a9e14745c75a17"
+    revision: "7a7a89610664ba13a59c020e13be2d76adc4f91a"
 
 targets:
   Synth:
