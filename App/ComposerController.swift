@@ -35,7 +35,7 @@ final class ComposerController {
         var isFile: Bool { prefix.hasPrefix("@") }
         var filter: String { String(prefix.dropFirst()).trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
 
-        init?(view: NSTextView, inCode: Bool) {
+        @MainActor init?(view: NSTextView, inCode: Bool) {
             let caret = view.selectedRange()
             let text = view.string as NSString
             guard !inCode, !view.hasMarkedText(), caret.length == 0, caret.location <= text.length else { return nil }
@@ -97,6 +97,7 @@ final class ComposerController {
         choices = []
         refreshFiles()
         textView = nil
+        height = 40
     }
 
     func update(_ view: NSTextView, inCode: Bool, model: ConversationModel, session: String) {
@@ -105,7 +106,7 @@ final class ComposerController {
         self.inCode = inCode
         textView = view
         if let measured = view.textLayoutManager?.usageBoundsForTextContainer.height, measured.isFinite {
-            height = min(170, max(40, ceil(measured) + 8))
+            height = max(40, ceil(measured) + 8)
         }
         let next = Query(view: view, inCode: inCode)
         if next != dismissedQuery { dismissedQuery = nil }

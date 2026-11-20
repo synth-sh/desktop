@@ -1,8 +1,12 @@
 import SwiftUI
+import SynthClient
 import SynthProtocol
 
 enum TranscriptAnchor: Hashable {
     case message(UInt64)
+    case activity(UInt64)
+    case reasoning(UInt64)
+    case stream(UInt64)
     case tail
 }
 
@@ -10,52 +14,55 @@ struct TranscriptView: View {
     let sessionID: String
     let messages: [Synth.Message]
     let stream: Synth.Stream?
+    let status: Synth.Status?
     let notices: [String]
     let interactions: [Interaction]
     let model: ConversationModel
     @Binding var anchor: TranscriptAnchor?
 
+    private let bottomTolerance: CGFloat = 24
+
     @State private var followsConversation = true
     @State private var userScrolling = false
     @State private var position = ScrollPosition(idType: TranscriptAnchor.self)
+    @State private var followUpdate: Task<Void, Never>?
+
+    private var rows: [TranscriptActivity.Row] {
+        TranscriptActivity.rows(
+            for: messages, busy: model.busy, planUpdates: model.state?.planUpdates ?? [:],
+            steeringSequences: model.state?.steeringSequences ?? []
+        )
+    }
+
+    private var liveReasoning: Synth.Stream? {
+        guard let stream, !stream.thinking.isEmpty else { return nil }
+        return stream
+    }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                if model.hasOlderMessages {
-                    Button("Load Earlier Messages") { Task { await model.loadOlder() } }
-                        .disabled(model.loadingHistory.contains(sessionID))
-                }
-                ForEach(messages.filter { ["user", "assistant", "summary"].contains($0.role) }) { message in
-                    TranscriptRow(message: message, sessionID: sessionID, model: model)
-                        .id(TranscriptAnchor.message(message.seq))
-                }
-                if let stream {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if !stream.thinking.isEmpty { ReasoningText(text: stream.thinking) }
-                        if !stream.text.isEmpty {
-                            StreamingMarkdown(text: stream.text, identifier: sessionID + ":stream")
-                        }
-                    }
-                    .id(stream.request)
-                }
-                TranscriptNotices(notices: notices)
-                ForEach(interactions) { interaction in
-                    InteractionCard(interaction: interaction, model: model)
-                }
-                Color.clear.frame(height: 1).id(TranscriptAnchor.tail).accessibilityHidden(true)
-            }
-            .scrollTargetLayout()
-            .frame(maxWidth: 730, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 18)
-            .frame(maxWidth: .infinity)
+        ScrollViewReader { reader in
+            transcript(reader)
         }
+        .onDisappear { followUpdate?.cancel() }
+    }
+
+    private func transcript(_ reader: ScrollViewProxy) -> some View {
+        ScrollView { transcriptContent(reader) }
         .defaultScrollAnchor(.bottom, for: .initialOffset)
         .defaultScrollAnchor(followsConversation ? .bottom : .top, for: .sizeChanges)
         .scrollPosition($position)
+        .onChange(of: messages.last?.seq) {
+            if followsConversation, !userScrolling {
+                position.scrollTo(edge: .bottom)
+                followTail(using: reader)
+            }
+        }
         .onScrollTargetVisibilityChange(idType: TranscriptAnchor.self, threshold: 0.01) { visible in
-            anchor = visible.contains(.tail) ? .tail : visible.first
+            if followsConversation {
+                anchor = .tail
+            } else if let visibleRow = visible.first(where: { $0 != .tail }) {
+                anchor = visibleRow
+            }
         }
         .onAppear {
             if let anchor, anchor != .tail {
@@ -63,28 +70,117 @@ struct TranscriptView: View {
                 position.scrollTo(id: anchor, anchor: .top)
             }
         }
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentSize.height - geometry.visibleRect.maxY < 100
-        } action: { _, nearBottom in
-            if nearBottom || userScrolling { followsConversation = nearBottom }
-        }
-        .onScrollPhaseChange { previous, phase, context in
-            let trackingUser = phase == .tracking || phase == .interacting || phase == .decelerating
-            userScrolling = trackingUser
-            if trackingUser || previous == .interacting || previous == .decelerating {
-                followsConversation = context.geometry.contentSize.height - context.geometry.visibleRect.maxY < 100
+        .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
+            ScrollMetrics(
+                height: geometry.contentSize.height, viewport: geometry.containerSize.height,
+                distanceFromBottom: geometry.contentSize.height - geometry.visibleRect.maxY
+            )
+        } action: { previous, current in
+            if userScrolling {
+                followsConversation = current.distanceFromBottom <= bottomTolerance
+            } else if previous.height != current.height || previous.viewport != current.viewport {
+                followTail(using: reader)
             }
         }
-        .overlay(alignment: .bottomTrailing) {
-            if !followsConversation {
-                Button("Jump to Latest", systemImage: "arrow.down") {
-                    followsConversation = true
-                    position.scrollTo(edge: .bottom)
-                }
-                .buttonStyle(.bordered)
-                .labelStyle(.iconOnly)
-                .help("Jump to Latest")
-                .padding()
+        .onScrollPhaseChange { previous, phase, context in
+            userScrolling = phase == .interacting || phase == .decelerating
+            if userScrolling || previous == .interacting || previous == .decelerating {
+                let geometry = context.geometry
+                followsConversation = geometry.contentSize.height - geometry.visibleRect.maxY <= bottomTolerance
+            }
+        }
+        .onChange(of: followsConversation) { _, following in
+            anchor = following ? .tail : position.viewID(type: TranscriptAnchor.self)
+        }
+        .overlay(alignment: .bottomTrailing) { jumpButton }
+    }
+
+    private func transcriptContent(_ reader: ScrollViewProxy) -> some View {
+        let rows = rows
+        return LazyVStack(alignment: .leading, spacing: 18) {
+            if model.hasOlderMessages {
+                Button("Load Earlier Messages") { Task { await model.loadOlder() } }
+                    .disabled(model.loadingHistory.contains(sessionID))
+            }
+            ForEach(rows) { row in
+                transcriptRow(row, last: rows.last?.id)
+            }
+            if let liveReasoning, !endsInActivity(rows.last) {
+                TranscriptActivityView(
+                    activity: .streaming(request: liveReasoning.request), stream: liveReasoning,
+                    sessionID: sessionID, status: status, model: model
+                )
+                .id(TranscriptAnchor.reasoning(liveReasoning.request))
+            }
+            if let stream, !stream.text.isEmpty {
+                StreamingMarkdown(text: stream.text, identifier: "\(sessionID):stream:\(stream.request)")
+                    .id(TranscriptAnchor.stream(stream.request))
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { _ in
+                        followTail(using: reader)
+                    }
+            }
+            TranscriptNotices(notices: notices)
+            ForEach(interactions) { interaction in
+                InteractionCard(interaction: interaction, model: model)
+            }
+            QueuedSteering(messages: status?.steering ?? [])
+            Color.clear.frame(height: 1).id(TranscriptAnchor.tail).accessibilityHidden(true)
+        }
+        .scrollTargetLayout()
+        .frame(maxWidth: 730, alignment: .leading)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private var jumpButton: some View {
+        if !followsConversation {
+            Button("Jump to Latest", systemImage: "arrow.down") {
+                followsConversation = true
+                position.scrollTo(edge: .bottom)
+            }
+            .buttonStyle(.bordered)
+            .labelStyle(.iconOnly)
+            .help("Jump to Latest")
+            .padding()
+        }
+    }
+
+    private func followTail(using reader: ScrollViewProxy) {
+        guard followsConversation, !userScrolling, followUpdate == nil else { return }
+        followUpdate = Task { @MainActor in
+            defer { followUpdate = nil }
+            await Task.yield()
+            guard !Task.isCancelled, followsConversation, !userScrolling else { return }
+            reader.scrollTo(TranscriptAnchor.tail, anchor: .bottom)
+        }
+    }
+
+    private struct ScrollMetrics: Equatable {
+        let height: CGFloat
+        let viewport: CGFloat
+        let distanceFromBottom: CGFloat
+    }
+
+    private func endsInActivity(_ row: TranscriptActivity.Row?) -> Bool {
+        if case .activity? = row { return true }
+        return false
+    }
+
+    @ViewBuilder
+    private func transcriptRow(_ row: TranscriptActivity.Row, last: TranscriptActivity.ID?) -> some View {
+        switch row {
+        case .message(let message):
+            TranscriptRow(message: message, sessionID: sessionID, model: model)
+                .id(TranscriptAnchor.message(message.seq))
+        case .activity(let activity):
+            if case .activity(let sequence) = activity.id {
+                TranscriptActivityView(
+                    activity: activity, stream: row.id == last ? liveReasoning : nil,
+                    sessionID: sessionID, status: status, model: model
+                )
+                .id(TranscriptAnchor.activity(sequence))
             }
         }
     }
@@ -123,7 +219,9 @@ private struct TranscriptRow: View {
                 .frame(maxWidth: 490, alignment: .trailing)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             case "assistant":
-                assistant
+                if !message.text.isEmpty {
+                    MarkdownView(text: message.text, identifier: "\(sessionID):\(message.seq)")
+                }
             case "summary":
                 Text(message.text).font(.caption).foregroundStyle(palette.muted).textSelection(.enabled)
             default:
@@ -132,106 +230,26 @@ private struct TranscriptRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-
-    private typealias BodyLoader = @MainActor () async throws -> String
-
-    @ViewBuilder
-    private var assistant: some View {
-        if message.thinking?.isEmpty == false || message.thinkingBytes > 0 {
-            ReasoningText(text: message.thinking ?? "", load: reasoningLoader)
-        }
-        if !message.text.isEmpty { MarkdownView(text: message.text, identifier: "\(sessionID):\(message.seq)") }
-        ForEach(Array(message.toolCalls.enumerated()), id: \.offset) { entry in
-            ToolRow(tool: entry.element, load: resultLoader(entry.element, index: entry.offset))
-        }
-    }
-
-    private var reasoningLoader: BodyLoader? {
-        guard message.thinkingBytes > (message.thinking?.utf8.count ?? 0) else { return nil }
-        return { try await model.fullThinking(message, in: sessionID) }
-    }
-
-    private func resultLoader(_ tool: Synth.ToolCall, index: Int) -> BodyLoader? {
-        guard tool.resultBytes > (tool.result?.utf8.count ?? 0) else { return nil }
-        return { try await model.fullToolResult(sequence: message.seq, call: index, in: sessionID) }
-    }
 }
 
-private struct ReasoningText: View {
+private struct QueuedSteering: View {
     @Environment(\.synthPalette) private var palette
-    let text: String
-    var load: (@MainActor () async throws -> String)?
+    let messages: [String]
 
     var body: some View {
-        DisclosureGroup("Reasoning") {
-            ExpandableBody(preview: text, load: load)
-                .padding(.vertical, 5)
-        }
-        .font(.callout)
-        .foregroundStyle(palette.muted)
-    }
-}
-
-private struct ToolRow: View {
-    @Environment(\.synthPalette) private var palette
-    let tool: Synth.ToolCall
-    let load: (@MainActor () async throws -> String)?
-
-    var body: some View {
-        DisclosureGroup {
-            VStack(alignment: .leading, spacing: 8) {
-                ToolArgumentsView(arguments: tool.arguments, showsDiff: tool.name == "edit" || tool.name == "write")
-                if let result = tool.result, !result.isEmpty || load != nil {
-                    Divider()
-                    ExpandableBody(preview: result, load: load)
-                } else if load != nil {
-                    ExpandableBody(preview: "", load: load)
+        if !messages.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Queued steering", systemImage: "arrow.turn.down.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.accent)
+                ForEach(messages.indices, id: \.self) { index in
+                    Text(verbatim: messages[index]).textSelection(.enabled)
                 }
             }
-            .font(.system(.caption, design: .monospaced))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 8)
-        } label: {
-            HStack {
-                Label(tool.name, systemImage: "wrench")
-                Spacer()
-                Text(tool.status.replacingOccurrences(of: "_", with: " ").capitalized)
-                    .font(.caption)
-                    .foregroundStyle(palette.muted)
-            }
-        }
-        .padding(10)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-private struct ExpandableBody: View {
-    @Environment(\.synthPalette) private var palette
-    let preview: String
-    let load: (@MainActor () async throws -> String)?
-    @State private var full: String?
-    @State private var error: String?
-    @State private var loading = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(full ?? preview)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-            if let error { Text(error).foregroundStyle(palette.danger) }
-            if let load, full == nil {
-                Button(loading ? "Loading…" : "Load Full Text") {
-                    Task {
-                        loading = true
-                        defer { loading = false }
-                        error = nil
-                        do { full = try await load() } catch {
-                            if !Task.isCancelled { self.error = error.localizedDescription }
-                        }
-                    }
-                }
-                .disabled(loading)
-            }
+            .padding(10)
+            .frame(maxWidth: 490, alignment: .leading)
+            .background(palette.surface, in: .rect(cornerRadius: 9))
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 }

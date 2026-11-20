@@ -9,6 +9,12 @@ enum MarkdownPresentation {
         lightTheme: .githubDark, autoSwitchAppearance: false,
         lightBackground: NSColor(calibratedWhite: 0.13, alpha: 1)
     )
+    private static let diffLanguages: [String: String] = [
+        "swift": "swift", "zig": "zig", "css": "css", "json": "json", "sql": "sql",
+        "yaml": "yaml", "yml": "yaml", "toml": "toml", "java": "java", "go": "go", "c": "c", "cpp": "cpp",
+        "js": "javascript", "jsx": "javascript", "ts": "typescript", "tsx": "typescript",
+        "py": "python", "rs": "rust", "rb": "ruby", "sh": "bash", "zsh": "bash", "html": "xml", "xml": "xml"
+    ]
 
     static func configuration(
         _ palette: SynthPalette, colorScheme: ColorScheme, fitsContent: Bool = false
@@ -31,5 +37,19 @@ enum MarkdownPresentation {
 
     static func openExternal(_ url: URL) {
         if ["https", "http", "mailto"].contains(url.scheme?.lowercased() ?? "") { NSWorkspace.shared.open(url) }
+    }
+
+    static func highlightedLine(_ text: String, path: String, colorScheme: ColorScheme) -> AttributedString? {
+        let fileExtension = (path as NSString).pathExtension.lowercased()
+        guard !text.isEmpty, text.utf8.count <= 320, let language = diffLanguages[fileExtension] else { return nil }
+        let bridge = colorScheme == .dark ? darkCode : lightCode
+        guard let highlighted = bridge.highlight(code: text, language: language),
+              var output = try? AttributedString(highlighted, including: \.appKit) else { return nil }
+        for run in output.runs {
+            if let color = run.appKit.foregroundColor {
+                output[run.range].swiftUI.foregroundColor = Color(nsColor: color)
+            }
+        }
+        return output
     }
 }

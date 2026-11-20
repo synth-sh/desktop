@@ -127,6 +127,7 @@ final class ConversationModel {
 
     private func select(_ opened: OpenedConversation) {
         project = opened.folder
+        if sessionID != opened.id { (state, interactions) = (nil, []) }
         sessionID = opened.id
         notifications.select(opened.id)
         pendingSelection = nil
@@ -219,8 +220,7 @@ final class ConversationModel {
         let snapshot = await client.viewState(for: identifier)
         guard self.client === client, sessionID == identifier else { return }
         connection = snapshot.connection
-        state = snapshot.session
-        interactions = snapshot.interactions
+        (state, interactions) = (snapshot.session, snapshot.interactions)
         activity = snapshot.activity
         if let identifier, state?.status?.isBusy != true && submitting == 0 {
             stopping.remove(identifier)

@@ -10,6 +10,7 @@ struct RichComposer: View {
     @Bindable var model: ConversationModel
     @Binding var focused: Bool
     let controller: ComposerController
+    let maximumHeight: CGFloat
     @State private var preview: ComposerAttachment?
 
     var body: some View {
@@ -93,7 +94,7 @@ struct RichComposer: View {
                 attributes: [.foregroundColor: NSColor(palette.muted)]
             )
         )
-        .frame(height: controller.height)
+        .frame(height: min(controller.height, maximumHeight))
         .accessibilityLabel("Message")
     }
 
@@ -218,7 +219,7 @@ struct ComposerAttachmentStrip: View {
                     )
                 }
             }
-            .padding(8)
+            .padding(9)
         }
         .scrollIndicators(.visible)
         .fixedSize(horizontal: false, vertical: true)
@@ -253,7 +254,7 @@ private struct DraftAttachmentChip: View {
             Button(action: open) {
                 HStack(spacing: 8) {
                     if let thumbnail {
-                        Image(decorative: thumbnail, scale: 2).resizable().scaledToFit().frame(width: 56, height: 48)
+                        Image(decorative: thumbnail, scale: 2).resizable().scaledToFit().frame(width: 64, height: 54)
                     } else {
                         Image(systemName: item.isImage ? "photo" : "doc.text")
                     }

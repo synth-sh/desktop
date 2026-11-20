@@ -14,6 +14,7 @@ struct ConversationView: View {
     @State private var scrollAnchors: [String: TranscriptAnchor] = [:]
     @State private var composerFocused = false
     @State private var composerController = ComposerController()
+    @State private var workspaceHeight: CGFloat = 700
 
     var body: some View {
         NavigationSplitView {
@@ -174,6 +175,7 @@ struct ConversationView: View {
                         sessionID: identifier,
                         messages: model.messages,
                         stream: model.state?.stream,
+                        status: model.state?.status,
                         notices: model.state?.notices ?? [],
                         interactions: model.interactions,
                         model: model,
@@ -186,7 +188,11 @@ struct ConversationView: View {
                 }
             }
             composer
+            if let status = model.state?.status, !status.root.isEmpty {
+                CheckoutContext(root: status.root, branch: status.branch)
+            }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { workspaceHeight = $0 }
     }
 
     private var emptyConversation: some View {
@@ -271,7 +277,8 @@ extension ConversationView {
         }
         .frame(maxWidth: 780)
         .padding(.horizontal, 24)
-        .padding(.vertical, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 
     private var composerBox: some View {
@@ -311,7 +318,10 @@ extension ConversationView {
     }
 
     private var composerInput: some View {
-        RichComposer(model: model, focused: $composerFocused, controller: composerController)
+        RichComposer(
+            model: model, focused: $composerFocused, controller: composerController,
+            maximumHeight: min(300, max(170, workspaceHeight * 0.40))
+        )
     }
 
     private var connectionLabel: some View {
@@ -337,6 +347,33 @@ extension ConversationView {
         case .disconnecting: return "Disconnecting…"
         case .failed, .disconnected: return "Disconnected"
         }
+    }
+}
+
+private struct CheckoutContext: View {
+    @Environment(\.synthPalette) private var palette
+    let root: String
+    let branch: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Label((root as NSString).abbreviatingWithTildeInPath, systemImage: "folder")
+                .truncationMode(.middle)
+                .help(root)
+                .accessibilityLabel("Working directory \(root)")
+            if !branch.isEmpty {
+                Label(branch, systemImage: "arrow.triangle.branch")
+                    .help(branch)
+                    .accessibilityLabel("Git branch \(branch)")
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .lineLimit(1)
+        .foregroundStyle(palette.muted)
+        .frame(maxWidth: 780)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 8)
     }
 }
 
