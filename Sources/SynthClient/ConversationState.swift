@@ -7,6 +7,7 @@ extension SynthClient {
         public let awaitingInput: Bool
         public let finished: UInt64
         public let failed: Bool
+        public let plan: [Synth.PlanStep]
     }
 
     public struct ViewState: Sendable {
@@ -25,7 +26,8 @@ extension SynthClient {
                 busy: connectionState == .connected && session.failure == nil && session.status?.isBusy == true,
                 awaitingInput: waiting.contains(identifier),
                 finished: session.status?.finished ?? 0,
-                failed: session.failure != nil
+                failed: session.failure != nil,
+                plan: session.status?.todos ?? []
             )
         }
         return ViewState(

@@ -35,7 +35,7 @@ final class ComposerController {
         var isFile: Bool { prefix.hasPrefix("@") }
         var filter: String { String(prefix.dropFirst()).trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
 
-        init?(view: NSTextView, inCode: Bool) {
+        @MainActor init?(view: NSTextView, inCode: Bool) {
             let caret = view.selectedRange()
             let text = view.string as NSString
             guard !inCode, !view.hasMarkedText(), caret.length == 0, caret.location <= text.length else { return nil }
@@ -74,6 +74,7 @@ final class ComposerController {
     private var dismissedQuery: Query?
     private var paths: [String]?
     private var inCode = false
+    private var observedSelection: NSRange?
     private var suppressedSelection = false
     private let busID = UUID().uuidString
 
@@ -97,6 +98,8 @@ final class ComposerController {
         choices = []
         refreshFiles()
         textView = nil
+        observedSelection = nil
+        height = 40
     }
 
     func update(_ view: NSTextView, inCode: Bool, model: ConversationModel, session: String) {
@@ -104,8 +107,13 @@ final class ComposerController {
         if self.session != session { reset(); self.session = session }
         self.inCode = inCode
         textView = view
+        let range = view.selectedRange()
+        if observedSelection != range {
+            observedSelection = range
+            revealCaret(in: session)
+        }
         if let measured = view.textLayoutManager?.usageBoundsForTextContainer.height, measured.isFinite {
-            height = min(170, max(40, ceil(measured) + 8))
+            height = max(40, ceil(measured) + 8)
         }
         let next = Query(view: view, inCode: inCode)
         if next != dismissedQuery { dismissedQuery = nil }
@@ -239,5 +247,45 @@ final class ComposerController {
               applyInlineCodeRequest: .init(busID + "code"), applyBlockquoteRequest: .init(busID + "quote"),
               applyUnorderedListRequest: .init(busID + "list"), applyOrderedListRequest: .init(busID + "numbered"),
               applyLinkRequest: .init(busID + "link"), applyCodeBlockRequest: .init(busID + "block"))
+    }
+}
+
+extension ComposerController {
+    func revealCaret(in session: String) {
+        guard self.session == session, let textView, textView.window?.firstResponder === textView,
+              let scroller = textView.enclosingScrollView else { return }
+        let range = NSRange(location: NSMaxRange(textView.selectedRange()), length: 0)
+        let clip = scroller.contentView
+        var target = clip.bounds
+        if range.location == textView.textStorage?.length {
+            target.origin.y = clip.documentRect.maxY - target.height
+        } else if let rect = caretRect(for: range, in: textView) {
+            let caret = textView.convert(rect, to: clip)
+            let margin = textView.textContainerInset.height
+            target.origin.y = min(max(target.minY, caret.maxY - target.height + margin), caret.minY - margin)
+        } else {
+            textView.scrollRangeToVisible(range)
+            return
+        }
+        let origin = clip.constrainBoundsRect(target).origin
+        guard origin != clip.bounds.origin else { return }
+        clip.scroll(to: origin)
+        scroller.reflectScrolledClipView(clip)
+    }
+
+    private func caretRect(for range: NSRange, in textView: NSTextView) -> CGRect? {
+        guard let layout = textView.textLayoutManager, let content = layout.textContentManager,
+              let location = content.location(layout.documentRange.location, offsetBy: range.location),
+              let prefix = NSTextRange(location: layout.documentRange.location, end: location) else { return nil }
+        layout.ensureLayout(for: prefix)
+        var caret: CGRect?
+        let caretRange = NSTextRange(location: location)
+        layout.enumerateTextSegments(in: caretRange, type: .standard, options: []) { _, rect, _, _ in
+            guard rect.height > 0 else { return true }
+            let origin = textView.textContainerOrigin
+            caret = rect.offsetBy(dx: origin.x, dy: origin.y)
+            return false
+        }
+        return caret
     }
 }

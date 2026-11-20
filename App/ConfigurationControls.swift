@@ -1,37 +1,30 @@
 import SwiftUI
+import SynthProtocol
 
 struct ModeControl: View {
     @Bindable var model: ConversationModel
 
     var body: some View {
-        Button { model.showModePicker.toggle() } label: {
+        ConversationDropdown(isPresented: $model.showModePicker) {
             ConversationPopoverLabel(title: modeLabel)
+        } content: {
+            Text("Mode").font(.headline)
+            VStack(spacing: 4) {
+                ForEach(model.modes) { mode in
+                    let selected = mode.id == model.state?.status?.agent
+                    Button {
+                        model.showModePicker = false
+                        Task { await model.selectMode(mode) }
+                    } label: {
+                        ConversationPopoverChoice(title: mode.name, selected: selected)
+                    }
+                }
+            }
+            .buttonStyle(ConversationPopoverRowStyle())
         }
         .accessibilityLabel("Mode")
         .accessibilityValue(modeLabel)
         .fixedSize()
-        .popover(isPresented: $model.showModePicker, arrowEdge: .top) {
-            ConversationPopover {
-                Text("Mode").font(.headline)
-                VStack(spacing: 4) {
-                    ForEach(model.modes) { mode in
-                        let selected = mode.id == model.state?.status?.agent
-                        Button {
-                            model.showModePicker = false
-                            Task { await model.selectMode(mode) }
-                        } label: {
-                            HStack {
-                                Text(mode.name)
-                                Spacer()
-                                if selected { Image(systemName: "checkmark").accessibilityHidden(true) }
-                            }
-                        }
-                        .accessibilityAddTraits(selected ? .isSelected : [])
-                    }
-                }
-                .buttonStyle(ConversationPopoverRowStyle())
-            }
-        }
         .onChange(of: model.sessionID) { model.showModePicker = false }
     }
 
@@ -44,22 +37,43 @@ struct ConfigurationControls: View {
     @Bindable var model: ConversationModel
 
     var body: some View {
-        Button { model.showModelPicker.toggle() } label: {
+        ConversationDropdown(isPresented: $model.showModelPicker, width: 350) {
             ConversationPopoverLabel(title: modelLabel)
+        } content: {
+            Text("Models").font(.headline)
+            ModelBrowser(model: model) { model.showModelPicker = false }
         }
         .accessibilityLabel("Model and reasoning effort")
         .accessibilityValue(modelLabel)
-        .popover(isPresented: $model.showModelPicker, arrowEdge: .top) {
-            ConversationPopover(width: 350) {
-                Text("Models").font(.headline)
-                ModelBrowser(model: model) { model.showModelPicker = false }
-            }
-        }
         .onChange(of: model.sessionID) { model.showModelPicker = false }
     }
 
     private var modelLabel: String {
         guard let status = model.state?.status, !status.model.isEmpty else { return "Model" }
         return status.effort.isEmpty ? status.model : "\(status.model) · \(status.effort.capitalized)"
+    }
+}
+
+extension ConversationModel {
+    func selectMode(_ mode: ACP.Mode) async {
+        guard canConfigure, let sessionID else { return }
+        do {
+            try await configure(in: sessionID) { try await $0.setMode(mode.id, in: $1) }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    var canChangeApprovalMode: Bool {
+        canReadConfiguration && !isUpdatingConfiguration && state?.status?.approvalMode != nil
+    }
+
+    func selectApprovalMode(_ mode: Synth.ApprovalMode, in session: String) async {
+        guard canChangeApprovalMode, sessionID == session, state?.status?.approvalMode != mode else { return }
+        do {
+            try await configure(in: session, whileBusy: true) { try await $0.setApprovalMode(mode, in: $1) }
+        } catch where !Task.isCancelled && sessionID == session {
+            self.error = error.localizedDescription
+        } catch {}
     }
 }

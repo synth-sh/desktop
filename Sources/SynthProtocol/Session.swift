@@ -155,6 +155,41 @@ public enum ACP {
 }
 
 public enum Synth {
+    public struct PlanStep: Decodable, Equatable, Sendable {
+        public enum Status: String, Sendable {
+            case pending, active, done
+
+            public init(_ value: String) {
+                switch value {
+                case "active", "in_progress": self = .active
+                case "done", "completed": self = .done
+                default: self = .pending
+                }
+            }
+        }
+
+        public let text: String
+        public let status: Status
+
+        public init(text: String, status: Status) {
+            self.text = text
+            self.status = status
+        }
+
+        public init(from decoder: any Decoder) throws {
+            if let text = try? decoder.singleValueContainer().decode(WireText.self) {
+                self.init(text: text.wrappedValue, status: .pending)
+            } else {
+                let fields = try decoder.container(keyedBy: CodingKeys.self)
+                let text = try fields.decode(WireText.self, forKey: .text)
+                let status = (try? fields.decode(String.self, forKey: .status)) ?? ""
+                self.init(text: text.wrappedValue, status: .init(status))
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey { case text, status }
+    }
+
     public struct Snapshot: Decodable, Sendable {
         public let sessionId: String
         public let status: Status
@@ -172,6 +207,7 @@ public enum Synth {
         public let project: String
         public let branch: String
         public let agent: String
+        private let approvalModeName: String?
         public let model: String
         public let provider: String
         public let providerID: String
@@ -187,8 +223,18 @@ public enum Synth {
         public let outcome: String?
         public let steering: [String]
         public let pendingDescription: String
+        public let todos: [PlanStep]?
+        public let pendingSequence: UInt64?
+        public let notes: [WireText]?
 
         public var isBusy: Bool { state != "idle" }
+        public var approvalMode: ApprovalMode? { approvalModeName.flatMap(ApprovalMode.init(rawValue:)) }
+
+        public func toolNote(sequence: UInt64, index: Int) -> String? {
+            guard sequence == pendingSequence, let notes, notes.indices.contains(index),
+                  !notes[index].wrappedValue.isEmpty else { return nil }
+            return notes[index].wrappedValue
+        }
 
         private enum CodingKeys: String, CodingKey {
             case state
@@ -198,6 +244,7 @@ public enum Synth {
             case project
             case branch
             case agent
+            case approvalModeName = "approval_mode"
             case model
             case provider
             case providerID = "provider_id"
@@ -213,6 +260,9 @@ public enum Synth {
             case outcome
             case steering
             case pendingDescription = "pending_description"
+            case todos
+            case pendingSequence = "pending_seq"
+            case notes
         }
     }
 

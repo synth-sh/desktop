@@ -23,7 +23,8 @@ final class ConversationModel {
     var activity: [String: SynthClient.Activity] = [:]
     var loadingHistory: Set<String> = []
     var openedSessions: [String: OpenedConversation] = [:]
-    var historyBySession: [String: [Synth.Message]] = [:]
+    var historyBySession: [String: ConversationHistory] = [:]
+    @ObservationIgnored var cachedTranscript: ConversationTranscript?
     var drafts: [String: ComposerDraft] = [:]
     var importingAttachments: [String: Int] = [:]
     var failedDrafts: [String: [ComposerDraft]] = [:]
@@ -127,6 +128,7 @@ final class ConversationModel {
 
     private func select(_ opened: OpenedConversation) {
         project = opened.folder
+        if sessionID != opened.id { (state, interactions) = (nil, []) }
         sessionID = opened.id
         notifications.select(opened.id)
         pendingSelection = nil
@@ -219,8 +221,7 @@ final class ConversationModel {
         let snapshot = await client.viewState(for: identifier)
         guard self.client === client, sessionID == identifier else { return }
         connection = snapshot.connection
-        state = snapshot.session
-        interactions = snapshot.interactions
+        (state, interactions) = (snapshot.session, snapshot.interactions)
         activity = snapshot.activity
         if let identifier, state?.status?.isBusy != true && submitting == 0 {
             stopping.remove(identifier)
@@ -355,17 +356,11 @@ extension ConversationModel {
         } catch {}
     }
 
-    func selectMode(_ mode: ACP.Mode) async {
-        guard canConfigure, let sessionID else { return }
-        do {
-            try await configure(in: sessionID) { try await $0.setMode(mode.id, in: $1) }
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-
-    func configure(in session: String, _ operation: (SynthClient, String) async throws -> Void) async throws {
-        guard canConfigure, sessionID == session, let client else { throw ConfigurationUnavailable() }
+    func configure(
+        in session: String, whileBusy: Bool = false, _ operation: (SynthClient, String) async throws -> Void
+    ) async throws {
+        guard canReadConfiguration, !isUpdatingConfiguration, whileBusy || !busy,
+              sessionID == session, let client else { throw ConfigurationUnavailable() }
         isUpdatingConfiguration = true
         defer { isUpdatingConfiguration = false }
         do {

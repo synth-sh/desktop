@@ -15,6 +15,12 @@ extension SynthClient {
         _ = try await call("session/set_mode", ACP.SetMode(sessionID: sessionID, modeID: modeID), as: ACP.Empty.self)
     }
 
+    public func setApprovalMode(_ mode: Synth.ApprovalMode, in sessionID: String) async throws {
+        try requireConnected()
+        let request = Synth.SetApprovalMode(sessionID: sessionID, mode: mode)
+        _ = try await call("_synth/set_approval_mode", request, as: ACP.Empty.self)
+    }
+
     public func setModel(_ model: Synth.Model, effort: String? = nil, in sessionID: String) async throws {
         try await setModel(model.name, provider: model.providerID, effort: effort, in: sessionID)
     }

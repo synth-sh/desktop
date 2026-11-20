@@ -24,9 +24,9 @@ struct ModelBrowser: View {
 
         VStack(alignment: .leading, spacing: 9) {
             HStack {
-                ModelSearchField(
+                PopoverSearchField(
                     text: $query, placeholder: readOnly ? "Search models" : searchPlaceholder,
-                    autofocus: !readOnly && providerID == nil,
+                    label: "Search models", autofocus: !readOnly && providerID == nil,
                     move: { move($0, in: choices, from: selected) }, submit: {
                         if !readOnly { apply(selected) }
                     }

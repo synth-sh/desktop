@@ -14,13 +14,18 @@ struct ConversationView: View {
     @State private var scrollAnchors: [String: TranscriptAnchor] = [:]
     @State private var composerFocused = false
     @State private var composerController = ComposerController()
+    @State private var workspaceHeight: CGFloat = 700
+    @State private var showsGitChanges = false
+    @State private var windowWidth: CGFloat = 900
+    @AppStorage("gitReviewPaneWidth") private var gitReviewWidth = 0.0
 
     var body: some View {
         NavigationSplitView {
             ProjectSidebar(model: model)
         } detail: {
-            detail
+            workspace
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
         .overlay(alignment: .topTrailing) {
             if let alert = model.notifications.toast {
                 ConversationToast(alert: alert) {
@@ -66,13 +71,6 @@ struct ConversationView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.background)
         .foregroundStyle(palette.foreground)
-        .navigationTitle(conversationTitle)
-        .toolbar(removing: model.sessionID == nil ? nil : .title)
-        .toolbar {
-            if let identifier = model.sessionID {
-                ToolbarItem(placement: .navigation) { titleMenu(for: identifier) }
-            }
-        }
         .alert("Rename Conversation", isPresented: isPresenting($renameTarget)) {
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) {}
@@ -167,13 +165,15 @@ struct ConversationView: View {
         VStack(spacing: 0) {
             banners
             if let identifier = model.sessionID {
-                if model.messages.isEmpty, model.state?.stream == nil, model.interactions.isEmpty {
+                let transcript = model.transcript
+                if transcript.firstSequence == nil, model.state?.stream == nil, model.interactions.isEmpty {
                     emptyConversation
                 } else {
                     TranscriptView(
                         sessionID: identifier,
-                        messages: model.messages,
+                        transcript: transcript,
                         stream: model.state?.stream,
+                        status: model.state?.status,
                         notices: model.state?.notices ?? [],
                         interactions: model.interactions,
                         model: model,
@@ -186,7 +186,11 @@ struct ConversationView: View {
                 }
             }
             composer
+            if let status = model.state?.status, !status.root.isEmpty {
+                CheckoutContext(root: status.root, branch: status.branch)
+            }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { workspaceHeight = $0 }
     }
 
     private var emptyConversation: some View {
@@ -271,35 +275,14 @@ extension ConversationView {
         }
         .frame(maxWidth: 780)
         .padding(.horizontal, 24)
-        .padding(.vertical, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 
     private var composerBox: some View {
         VStack(alignment: .leading, spacing: 9) {
             composerInput
-            HStack(spacing: 12) {
-                connectionLabel
-                ModeControl(model: model)
-                    .disabled(!model.canConfigure)
-                Spacer()
-                ConfigurationControls(model: model)
-                    .disabled(!model.canReadConfiguration)
-                if model.busy {
-                    Button("Stop", systemImage: "stop.fill") {
-                        Task { await model.stop() }
-                    }
-                    .disabled(!model.canStop)
-                }
-                Button {
-                    Task { await model.send() }
-                } label: {
-                    Label(model.busy ? "Steer" : "Send", systemImage: "arrow.up")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(SynthProminentButtonStyle())
-                .disabled(!model.canSend)
-                .help(model.busy ? "Steer (↩)" : "Send (↩)")
-            }
+            ComposerControls(model: model)
         }
         .padding(14)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: 16))
@@ -311,35 +294,61 @@ extension ConversationView {
     }
 
     private var composerInput: some View {
-        RichComposer(model: model, focused: $composerFocused, controller: composerController)
-    }
-
-    private var connectionLabel: some View {
-        Label {
-            Text(connectionText).lineLimit(1)
-        } icon: {
-            if model.connection == .connected {
-                Image(systemName: "circle.fill").foregroundStyle(palette.success)
-            } else {
-                Image(systemName: "circle.dashed")
-            }
-        }
-        .font(.caption)
-        .foregroundStyle(palette.muted)
-    }
-
-    private var connectionText: String {
-        if model.isOpening { return "Opening conversation…" }
-        if model.busy, let label = model.state?.status?.label, !label.isEmpty { return label }
-        switch model.connection {
-        case .connected: return model.busy ? "Working…" : "Connected"
-        case .connecting: return "Connecting…"
-        case .disconnecting: return "Disconnecting…"
-        case .failed, .disconnected: return "Disconnected"
-        }
+        RichComposer(
+            model: model, focused: $composerFocused, controller: composerController,
+            maximumHeight: min(300, max(170, workspaceHeight * 0.40))
+        )
     }
 }
 
 private extension String {
     var nonEmpty: String? { isEmpty ? nil : self }
+}
+
+private extension ConversationView {
+    private var workspace: some View {
+        ResizableTrailingPane(
+            savedWidth: $gitReviewWidth, isPresented: showsGitChanges && checkoutDirectory != nil,
+            defaultWidth: windowWidth * 0.4, minimumWidth: 285, minimumMainWidth: 245, dividerLabel: "Git pane width"
+        ) {
+            detail
+        } pane: {
+            if let checkoutDirectory {
+                GitReviewPane(directory: checkoutDirectory, turnCompletion: model.state?.status?.finished)
+                    .id(checkoutDirectory)
+            }
+        }
+        .navigationTitle(conversationTitle)
+        .toolbar(removing: model.sessionID == nil ? nil : .title)
+        .toolbar { workspaceToolbar }
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+    }
+
+    private var checkoutDirectory: URL? {
+        guard model.sessionID != nil else { return nil }
+        if let status = model.state?.status, !status.root.isEmpty, model.project != nil || !status.branch.isEmpty {
+            return URL(fileURLWithPath: status.root, isDirectory: true).standardizedFileURL
+        }
+        return model.project
+    }
+
+    @ToolbarContentBuilder
+    var workspaceToolbar: some ToolbarContent {
+        if let identifier = model.sessionID {
+            ToolbarItem(placement: .navigation) { titleMenu(for: identifier) }
+        }
+        if checkoutDirectory != nil {
+            ToolbarSpacer(.flexible, placement: .automatic)
+            ToolbarItem(placement: .automatic) {
+                Button(gitChangesAction, systemImage: "rectangle.split.2x1") {
+                    showsGitChanges.toggle()
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityLabel(gitChangesAction)
+                .help(gitChangesAction)
+            }
+        }
+    }
+
+    var gitChangesAction: String { showsGitChanges ? "Hide Git Changes" : "Show Git Changes" }
 }

@@ -13,6 +13,7 @@ struct SynthApp: App {
         Window("Synth", id: "conversation") {
             ConversationView(model: delegate.model)
                 .frame(minWidth: 640, minHeight: 500)
+                .containerBackground(theme.palette.background, for: .window)
                 .environment(\.synthPalette, theme.palette)
                 .preferredColorScheme(theme.colorScheme)
                 .tint(theme.palette.accent)

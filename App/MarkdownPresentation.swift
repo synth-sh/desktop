@@ -32,4 +32,19 @@ enum MarkdownPresentation {
     static func openExternal(_ url: URL) {
         if ["https", "http", "mailto"].contains(url.scheme?.lowercased() ?? "") { NSWorkspace.shared.open(url) }
     }
+
+    static func highlightedLine(_ text: String, path: String, colorScheme: ColorScheme) -> AttributedString? {
+        guard !text.isEmpty, text.utf8.count <= 320 else { return nil }
+        let filename = path as NSString
+        let language = filename.pathExtension.isEmpty ? filename.lastPathComponent : filename.pathExtension
+        let bridge = colorScheme == .dark ? darkCode : lightCode
+        guard let highlighted = bridge.highlight(code: text, registeredLanguage: language),
+              var output = try? AttributedString(highlighted, including: \.appKit) else { return nil }
+        for run in output.runs {
+            if let color = run.appKit.foregroundColor {
+                output[run.range].swiftUI.foregroundColor = Color(nsColor: color)
+            }
+        }
+        return output
+    }
 }

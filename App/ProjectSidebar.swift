@@ -110,12 +110,15 @@ struct ProjectSidebar: View {
                     Image(systemName: "exclamationmark.bubble.fill")
                         .foregroundStyle(palette.accent)
                         .accessibilityLabel("Waiting for input")
-                } else if current?.busy == true {
-                    ProgressView().controlSize(.mini).accessibilityLabel("Running")
-                } else if current?.failed == true {
+                }
+                if current?.failed == true {
                     Image(systemName: "exclamationmark.circle")
                         .foregroundStyle(palette.danger)
                         .accessibilityLabel("Disconnected")
+                } else if let plan = current?.plan, !plan.isEmpty {
+                    PlanProgressRing(plan: plan)
+                } else if current?.busy == true, current?.awaitingInput != true {
+                    ProgressView().controlSize(.mini).accessibilityLabel("Running")
                 }
             }
             .padding(.vertical, 7)
