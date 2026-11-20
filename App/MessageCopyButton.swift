@@ -127,5 +127,5 @@ struct UserMessageCopyButton: View {
 }
 
 private struct ClipboardWriteFailed: LocalizedError {
-    var errorDescription: String? { "Couldn’t write to the clipboard." }
+    var errorDescription: String? { "Couldn't write to the clipboard." }
 }
