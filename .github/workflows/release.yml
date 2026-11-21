@@ -18,35 +18,49 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     permissions:
+      actions: read
       contents: write
-    env:
-      APP: DerivedData/Build/Products/Release/Synth.app
     steps:
       - uses: actions/checkout@v7
-
-      - uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          persist-credentials: false
 
-      - name: Install build tools
+      - name: Find a successful main build for the tagged commit
+        id: main-build
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          command -v xcodegen >/dev/null || brew install xcodegen
-          command -v swiftlint >/dev/null || brew install swiftlint
+          commit=$(git rev-parse 'HEAD^{commit}')
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow tests.yml \
+            --branch main --event push --commit "$commit" --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run_id" ]; then
+            echo "::error::No successful Build and Test run on main for $commit. Wait for or rerun that build, then rerun this release."
+            exit 1
+          fi
+          echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
 
-      - name: Lint Swift
-        run: swiftlint lint --strict
+      - name: Download the tested app
+        id: download
+        uses: actions/download-artifact@v8
+        with:
+          name: tested-synth-app
+          path: ${{ runner.temp }}
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.main-build.outputs.run-id }}
 
-      - name: Build app and check version
+      - name: Explain how to recover a missing artifact
+        if: failure() && steps.download.outcome == 'failure'
+        run: echo '::error::Could not download the tested app. If it is missing or expired, rerun Build and Test for the tagged commit or see docs/releasing.md.'
+
+      - name: Unpack the tested app and check its version
         run: |
-          Scripts/build-app.sh
-          version=$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")
+          ditto -x -k "$RUNNER_TEMP/tested-synth-app.zip" "$RUNNER_TEMP"
+          version=$(plutil -extract CFBundleShortVersionString raw "$RUNNER_TEMP/Synth.app/Contents/Info.plist")
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::Release tag $GITHUB_REF_NAME differs from app version $version"
             exit 1
           fi
-
-      - name: Test with the bundled engine
-        run: python3 Tests/Fixtures/fake_provider.py "$APP/Contents/Helpers/synth"
 
       - name: Sign and notarize the release archive
         env:
@@ -55,7 +69,7 @@ jobs:
           NOTARY_API_KEY: ${{ secrets.NOTARY_API_KEY }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
-        run: Scripts/package-release.sh "$APP" "synth-desktop-${GITHUB_REF_NAME#v}-macos-arm64.zip"
+        run: Scripts/package-release.sh "$RUNNER_TEMP/Synth.app" "synth-desktop-${GITHUB_REF_NAME#v}-macos-arm64.zip"
 
       - name: Publish stable release
         env:

@@ -17,12 +17,29 @@ jobs:
   desktop:
     runs-on: macos-26
     timeout-minutes: 20
+    env:
+      APP: DerivedData/Build/Products/Release/Synth.app
+      ZIG_VERSION: '0.16.0'
     steps:
       - uses: actions/checkout@v7
 
-      - uses: mlugg/setup-zig@v2
+      - name: Read the engine submodule pin
+        id: engine-pin
+        run: |
+          engine_sha=$(git rev-parse HEAD:engine)
+          echo "sha=$engine_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pinned engine binary
+        id: engine-cache
+        uses: actions/cache@v6
         with:
-          version: 0.16.0
+          path: DerivedData/engine/bin/synth
+          key: synth-engine-${{ runner.os }}-${{ runner.arch }}-zig-${{ env.ZIG_VERSION }}-${{ steps.engine-pin.outputs.sha }}-${{ hashFiles('Scripts/build-app.sh') }}
+
+      - uses: mlugg/setup-zig@v2
+        if: steps.engine-cache.outputs.cache-hit != 'true'
+        with:
+          version: ${{ env.ZIG_VERSION }}
 
       - name: Install build tools
         run: |
@@ -33,7 +50,29 @@ jobs:
         run: swiftlint lint --strict
 
       - name: Build app
-        run: Scripts/build-app.sh
+        env:
+          ENGINE_CACHE_HIT: ${{ steps.engine-cache.outputs.cache-hit }}
+        run: |
+          if [ "$ENGINE_CACHE_HIT" = 'true' ]; then
+            export SYNTH_ENGINE="$GITHUB_WORKSPACE/DerivedData/engine/bin/synth"
+          fi
+          Scripts/build-app.sh
 
       - name: Test with the bundled engine
-        run: python3 Tests/Fixtures/fake_provider.py DerivedData/Build/Products/Release/Synth.app/Contents/Helpers/synth
+        run: python3 Tests/Fixtures/fake_provider.py "$APP/Contents/Helpers/synth"
+
+      # Archive the bundle before uploading to preserve executable modes and symlinks.
+      - name: Archive the tested app
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/tested-synth-app.zip"
+
+      - name: Upload the tested app
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tested-synth-app
+          path: ${{ runner.temp }}/tested-synth-app.zip
+          compression-level: 0
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
