@@ -26,14 +26,18 @@ struct WorkspaceTerminalSurface: View {
     }
 
     private var appearance: TerminalTheme {
-        guard useThemeBackground, let color = NSColor(palette.background).usingColorSpace(.sRGB) else {
-            return .default
+        var theme = TerminalTheme.default
+        theme.light = theme.light.selectionBackground("245DAE").selectionForeground("FFFFFF")
+        theme.dark = theme.dark.selectionBackground("82B5FF").selectionForeground("101828")
+
+        if useThemeBackground, let color = NSColor(palette.background).usingColorSpace(.sRGB) {
+            let components = [color.redComponent, color.greenComponent, color.blueComponent]
+                .map { Int(($0 * 255).rounded()) }
+            let hex = String(format: "%02X%02X%02X", components[0], components[1], components[2])
+            theme.light = theme.light.background(hex)
+            theme.dark = theme.dark.background(hex)
         }
-        let components = [color.redComponent, color.greenComponent, color.blueComponent]
-            .map { Int(($0 * 255).rounded()) }
-        let hex = String(format: "%02X%02X%02X", components[0], components[1], components[2])
-        let defaults = TerminalTheme.default
-        return TerminalTheme(light: defaults.light.background(hex), dark: defaults.dark.background(hex))
+        return theme
     }
 }
 
