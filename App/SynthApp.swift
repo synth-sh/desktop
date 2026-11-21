@@ -20,6 +20,9 @@ struct SynthApp: App {
         }
         .defaultSize(width: 900, height: 720)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Synth") { AboutPanel.show() }
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Conversation", systemImage: "square.and.pencil") {
                     Task { await delegate.model.open() }

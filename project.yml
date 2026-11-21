@@ -50,7 +50,7 @@ targets:
         ALWAYS_SEARCH_USER_PATHS: "NO"
         ENABLE_APP_SANDBOX: "NO"
         GENERATE_INFOPLIST_FILE: "NO"
-        MARKETING_VERSION: "0.2.1"
+        MARKETING_VERSION: "0.2.2"
         CURRENT_PROJECT_VERSION: "1"
         PRODUCT_NAME: Synth
         PRODUCT_BUNDLE_IDENTIFIER: sh.getsynth.desktop
@@ -73,6 +73,7 @@ targets:
           - $(SYNTH_ENGINE)
         outputFiles:
           - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/synth
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SynthEngineVersion.txt
         script: |
           set -eu
           if [ ! -x "$SYNTH_ENGINE" ]; then
@@ -80,9 +81,12 @@ targets:
               exit 1
           fi
           destination="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
-          mkdir -p "$destination"
+          resources="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+          mkdir -p "$destination" "$resources"
           install -m 755 "$SYNTH_ENGINE" "$destination/synth"
           codesign --force --sign - "$destination/synth"
+          version=$("$destination/synth" --version) || version=
+          printf '%s\n' "${version#synth }" > "$resources/SynthEngineVersion.txt"
 
 schemes:
   Synth:
