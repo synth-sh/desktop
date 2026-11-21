@@ -13,6 +13,20 @@ extension ConversationModel {
         drafts[session, default: .init()].attachments.append(contentsOf: items)
     }
 
+    func attachText(_ text: String, label: String, in session: String) {
+        guard text.utf8.count <= AttachmentImporter.textLimit else {
+            reportDraftError(ComposerError.fileTooLarge, in: session)
+            return
+        }
+        let lines = text.utf8.lazy.filter { $0 == 10 }.count + 1
+        let unit = lines == 1 ? "line" : "lines"
+        attach([.init(name: "\(label) (\(lines) \(unit))", body: .text(text))], in: session)
+    }
+
+    func attachTerminalContext(_ text: String) {
+        if let sessionID { attachText(text, label: "Terminal context", in: sessionID) }
+    }
+
     func removeAttachment(_ id: UUID) {
         guard let sessionID else { return }
         drafts[sessionID]?.attachments.removeAll { $0.id == id }

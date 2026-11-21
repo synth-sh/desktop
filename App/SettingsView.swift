@@ -127,6 +127,7 @@ private struct AppearanceSettings: View {
             }
             Divider()
             Toggle("Match terminal background to app theme", isOn: $useThemeBackground)
+                .toggleStyle(.switch)
         }
         .padding(20)
         .frame(maxHeight: .infinity, alignment: .top)

@@ -316,7 +316,10 @@ private extension ConversationView {
         } pane: {
             WorkspacePane(
                 directory: showsWorkspace ? workspaceDirectory : nil,
-                turnCompletion: model.state?.status?.finished
+                openDirectories: Set(model.openedSessions.values.map(\.workspaceDirectory)),
+                turnCompletion: model.state?.status?.finished,
+                addTerminalContext: model.attachTerminalContext,
+                hideWorkspace: { showsWorkspace = false }
             )
         }
         .navigationTitle(conversationTitle)
@@ -326,13 +329,7 @@ private extension ConversationView {
     }
 
     private var workspaceDirectory: URL? {
-        guard let sessionID = model.sessionID else { return nil }
-        if let status = model.state?.status, !status.root.isEmpty, model.project != nil || !status.branch.isEmpty {
-            return URL(fileURLWithPath: status.root, isDirectory: true).standardizedFileURL
-        }
-        return model.openedSessions[sessionID].map {
-            URL(fileURLWithPath: $0.cwd, isDirectory: true).standardizedFileURL
-        }
+        model.sessionID.flatMap { model.openedSessions[$0]?.workspaceDirectory }
     }
 
     @ToolbarContentBuilder

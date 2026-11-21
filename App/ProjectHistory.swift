@@ -156,6 +156,13 @@ extension ConversationModel {
         await loadGroup(project, refresh: true)
     }
 
+    func updateWorkspaceCheckout() {
+        guard let sessionID, let status = state?.status else { return }
+        let checkout = !status.root.isEmpty && (project != nil || !status.branch.isEmpty)
+            ? URL(fileURLWithPath: status.root, isDirectory: true).standardizedFileURL : nil
+        if openedSessions[sessionID]?.checkout != checkout { openedSessions[sessionID]?.checkout = checkout }
+    }
+
     func deleteConversation(_ identifier: String) async -> Bool {
         guard canDelete, sessionID == identifier, let client else { return false }
         let folder = project
@@ -198,6 +205,11 @@ struct OpenedConversation: Identifiable {
     let folder: URL?
     let cwd: String
     let modes: [ACP.Mode]
+    var checkout: URL?
+
+    var workspaceDirectory: URL {
+        checkout ?? URL(fileURLWithPath: cwd, isDirectory: true).standardizedFileURL
+    }
 }
 
 struct ConversationSelection {

@@ -6,6 +6,7 @@ struct WorkspaceTabPane: View {
     let turnCompletion: UInt64?
     let isVisible: Bool
     let tabs: WorkspaceTabs
+    let addTerminalContext: (String) -> Void
     var toggleBottom: (() -> Void)?
     var showsBottom = false
     @State private var showsTabPicker = false
@@ -63,7 +64,10 @@ struct WorkspaceTabPane: View {
                 ForEach(WorkspaceTabKind.allCases, id: \.self) { kind in
                     Button(kind.rawValue, systemImage: kind.icon) {
                         showsTabPicker = false
-                        tabs.add(kind, at: directory)
+                        switch kind {
+                        case .changes: tabs.addChanges()
+                        case .terminal: tabs.addTerminal(at: directory, addContext: addTerminalContext)
+                        }
                     }
                 }
             }
@@ -74,11 +78,12 @@ struct WorkspaceTabPane: View {
 
     private func tabButton(_ tab: WorkspaceTab) -> some View {
         let selected = tabs.selection == tab.id
+        let title = tabs.title(for: tab)
         return HStack(spacing: 2) {
             Button {
                 tabs.select(tab)
             } label: {
-                Label(tab.title, systemImage: tab.kind.icon)
+                Label(title, systemImage: tab.kind.icon)
                     .padding(.leading, 8)
                     .padding(.trailing, 4)
                     .frame(height: 26)
@@ -86,13 +91,13 @@ struct WorkspaceTabPane: View {
             }
             .accessibilityAddTraits(selected ? .isSelected : [])
 
-            Button("Close \(tab.title)", systemImage: "xmark") { tabs.close(tab.id) }
+            Button("Close \(title)", systemImage: "xmark") { tabs.close(tab.id) }
                 .labelStyle(.iconOnly)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(palette.muted)
                 .frame(width: 21, height: 26)
                 .contentShape(Rectangle())
-                .help("Close \(tab.title)")
+                .help("Close \(title)")
         }
         .buttonStyle(.plain)
         .font(.callout.weight(selected ? .semibold : .regular))
