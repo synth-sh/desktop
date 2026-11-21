@@ -9,6 +9,7 @@ public enum ACP {
     public struct Metadata: Codable, Sendable {
         public struct Synth: Codable, Sendable {
             public let `protocol`: Int
+            public let browser: Bool?
         }
 
         public let synth: Synth?
@@ -19,7 +20,7 @@ public enum ACP {
         public let clientCapabilities: JSONValue = .object([
             "elicitation": .object(["form": .object([:])])
         ])
-        public let metadata: Metadata = Metadata(synth: .init(protocol: ACP.synthVersion))
+        public let metadata: Metadata
         public let clientInfo = ["name": "synth-desktop"]
 
         private enum CodingKeys: String, CodingKey {
@@ -27,7 +28,9 @@ public enum ACP {
             case metadata = "_meta"
         }
 
-        public init() {}
+        public init(browser: Bool = false) {
+            metadata = Metadata(synth: .init(protocol: ACP.synthVersion, browser: browser ? true : nil))
+        }
     }
 
     public struct Initialized: Decodable, Sendable {

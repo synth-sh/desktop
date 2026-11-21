@@ -42,7 +42,9 @@ struct RouterFixture {
         ]
     }
 
-    func client() -> SynthClient { SynthClient(executable: engine, directory: root, environment: environment) }
+    func client(browser: SynthClient.BrowserHandler? = nil) -> SynthClient {
+        SynthClient(executable: engine, directory: root, environment: environment, browser: browser)
+    }
 }
 
 func wait<Value: Sendable>(

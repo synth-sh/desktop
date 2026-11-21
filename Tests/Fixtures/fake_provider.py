@@ -73,6 +73,14 @@ class Handler(BaseHTTPRequestHandler):
             )
             delta = {"content": "Fixture attachments verified" if valid else "Fixture attachments incomplete"}
 
+        if prompt == "check browser tools":
+            browser_tools = {
+                tool["function"]["name"]
+                for tool in request.get("tools", [])
+                if tool["function"]["name"].startswith("browser_")
+            }
+            delta = {"content": "Browser tools offered" if browser_tools else "Browser tools omitted"}
+
         if last["role"] == "user":
             tool = {
                 "approve fixture write": (
@@ -98,6 +106,8 @@ class Handler(BaseHTTPRequestHandler):
                     "ask_user",
                     {"question": "Which client answers?"},
                 ),
+                "inspect fixture browser": ("browser_snapshot", {}),
+                "cancel fixture browser": ("browser_snapshot", {}),
             }.get(prompt)
             if tool:
                 name, arguments = tool

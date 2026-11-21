@@ -318,9 +318,15 @@ private extension ConversationView {
                 directory: showsWorkspace ? workspaceDirectory : nil,
                 openDirectories: Set(model.openedSessions.values.map(\.workspaceDirectory)),
                 turnCompletion: model.state?.status?.finished,
+                browser: model.currentBrowser,
+                openBrowser: model.browserEnabled ? { model.selectBrowser() } : nil,
+                closeBrowser: { [id = model.sessionID] in if let id { model.closeBrowser(in: id) } },
                 addTerminalContext: model.attachTerminalContext,
                 hideWorkspace: { showsWorkspace = false }
             )
+        }
+        .onChange(of: model.currentBrowser?.id) {
+            if model.currentBrowser?.isSelected == true { showsWorkspace = true }
         }
         .navigationTitle(conversationTitle)
         .toolbar(removing: model.sessionID == nil ? nil : .title)

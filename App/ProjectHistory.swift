@@ -178,6 +178,7 @@ extension ConversationModel {
             groups[index].sessions.removeAll { $0.id == identifier }
         }
         openedSessions.removeValue(forKey: identifier)
+        closeBrowser(in: identifier)
         historyBySession.removeValue(forKey: identifier)
         drafts.removeValue(forKey: identifier)
         failedDrafts.removeValue(forKey: identifier)

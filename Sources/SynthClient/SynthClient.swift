@@ -2,14 +2,18 @@ import Foundation
 import SynthProtocol
 
 public actor SynthClient {
+    public typealias BrowserHandler = @MainActor @Sendable (Synth.BrowserRequest) async -> Synth.BrowserResult
+
     private let executable: URL
     private let arguments: [String]
     private let directory: URL?
     private let environment: [String: String]?
+    let browser: BrowserHandler?
     private var transport: ProcessTransport?
     var generation = UUID()
     private var nextID: Int64 = 1
     private var pending: [RequestID: CheckedContinuation<JSONValue, any Error>] = [:]
+    var browserRequests: [RequestID: Task<Void, Never>] = [:]
     private var workingDirectories: [String: String] = [:]
     private var subscribers: [UUID: AsyncStream<Void>.Continuation] = [:]
     var attentionSubscribers: [UUID: AsyncStream<AttentionEvent>.Continuation] = [:]
@@ -27,16 +31,19 @@ public actor SynthClient {
         executable: URL,
         arguments: [String] = ["acp"],
         directory: URL? = nil,
-        environment: [String: String]? = nil
+        environment: [String: String]? = nil,
+        browser: BrowserHandler? = nil
     ) {
         self.executable = executable
         self.arguments = arguments
         self.directory = directory
         self.environment = environment
+        self.browser = browser
     }
 
     deinit {
         transport?.closeInput()
+        for request in browserRequests.values { request.cancel() }
         for waiter in pending.values { waiter.resume(throwing: Failure.disconnected) }
         for subscriber in subscribers.values { subscriber.finish() }
         for subscriber in attentionSubscribers.values { subscriber.finish() }
@@ -88,7 +95,7 @@ public actor SynthClient {
                 await self?.handshakeTimedOut(generation)
             }
             defer { timer.cancel() }
-            let reply = try await call("initialize", ACP.Initialize(), as: ACP.Initialized.self)
+            let reply = try await call("initialize", ACP.Initialize(browser: browser != nil), as: ACP.Initialized.self)
             guard reply.protocolVersion == ACP.version, reply.metadata?.synth?.protocol == ACP.synthVersion else {
                 throw Failure.incompatible(acp: reply.protocolVersion, synth: reply.metadata?.synth?.protocol)
             }
@@ -250,7 +257,7 @@ extension SynthClient {
         try await write(envelope)
     }
 
-    private func write(_ envelope: Envelope) async throws {
+    func write(_ envelope: Envelope) async throws {
         guard let transport else { throw Failure.disconnected }
         let generation = self.generation
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
@@ -294,6 +301,9 @@ extension SynthClient {
 
     private func receiveRequest(_ method: String, id: RequestID, envelope: Envelope) async throws {
         switch method {
+        case Synth.BrowserRequest.method:
+            try await receiveBrowserRequest(id, envelope: envelope)
+            return
         case "session/request_permission":
             addInteraction(.permission(id, try envelope.parameters(Interaction.Permission.self)))
         case "elicitation/create":
@@ -314,7 +324,9 @@ extension SynthClient {
     private func receiveNotification(_ method: String, envelope: Envelope) throws {
         switch method {
         case "$/cancel_request":
-            removeInteraction(try envelope.parameters(ACP.CancelRequest.self).requestId)
+            let id = try envelope.parameters(ACP.CancelRequest.self).requestId
+            browserRequests.removeValue(forKey: id)?.cancel()
+            removeInteraction(id)
         case "_synth/snapshot":
             let event = try envelope.parameters(Synth.Snapshot.self)
             sessions[event.sessionId, default: .init()].replace(with: event)
@@ -363,6 +375,8 @@ extension SynthClient {
         let wasConnected = connectionState == .connected
         let connection = transport
         transport = nil
+        for request in browserRequests.values { request.cancel() }
+        browserRequests.removeAll()
         connectionState = connection == nil ? finalState : .disconnecting
         for id in interactions.keys { removeInteraction(id) }
         for waiter in pending.values { waiter.resume(throwing: cause) }
