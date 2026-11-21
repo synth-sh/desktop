@@ -120,7 +120,9 @@ final class ConversationModel {
             openedID = identifier
         }
         let modes = setup.modes?.availableModes ?? []
-        let opened = OpenedConversation(id: openedID, folder: folder, cwd: cwd, modes: modes)
+        let opened = OpenedConversation(
+            id: openedID, folder: folder, cwd: cwd, modes: modes, checkout: openedSessions[openedID]?.checkout
+        )
         openedSessions[openedID] = opened
         if let folder { register(folder) }
         return opened
@@ -223,6 +225,7 @@ final class ConversationModel {
         connection = snapshot.connection
         (state, interactions) = (snapshot.session, snapshot.interactions)
         activity = snapshot.activity
+        updateWorkspaceCheckout()
         if let identifier, state?.status?.isBusy != true && submitting == 0 {
             stopping.remove(identifier)
         }

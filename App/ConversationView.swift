@@ -15,9 +15,9 @@ struct ConversationView: View {
     @State private var composerFocused = false
     @State private var composerController = ComposerController()
     @State private var workspaceHeight: CGFloat = 700
-    @State private var showsGitChanges = false
+    @State private var showsWorkspace = false
     @State private var windowWidth: CGFloat = 900
-    @AppStorage("gitReviewPaneWidth") private var gitReviewWidth = 0.0
+    @AppStorage("gitReviewPaneWidth") private var workspaceWidth = 0.0
 
     var body: some View {
         NavigationSplitView {
@@ -307,16 +307,20 @@ private extension String {
 
 private extension ConversationView {
     private var workspace: some View {
-        ResizableTrailingPane(
-            savedWidth: $gitReviewWidth, isPresented: showsGitChanges && checkoutDirectory != nil,
-            defaultWidth: windowWidth * 0.4, minimumWidth: 285, minimumMainWidth: 245, dividerLabel: "Git pane width"
+        ResizableEdgePane(
+            savedSize: $workspaceWidth, isPresented: showsWorkspace && workspaceDirectory != nil,
+            defaultSize: windowWidth * 0.4, minimumSize: 285, minimumMainSize: 245,
+            dividerLabel: "Workspace width", keepsPaneMounted: true
         ) {
             detail
         } pane: {
-            if let checkoutDirectory {
-                GitReviewPane(directory: checkoutDirectory, turnCompletion: model.state?.status?.finished)
-                    .id(checkoutDirectory)
-            }
+            WorkspacePane(
+                directory: showsWorkspace ? workspaceDirectory : nil,
+                openDirectories: Set(model.openedSessions.values.map(\.workspaceDirectory)),
+                turnCompletion: model.state?.status?.finished,
+                addTerminalContext: model.attachTerminalContext,
+                hideWorkspace: { showsWorkspace = false }
+            )
         }
         .navigationTitle(conversationTitle)
         .toolbar(removing: model.sessionID == nil ? nil : .title)
@@ -324,12 +328,8 @@ private extension ConversationView {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     }
 
-    private var checkoutDirectory: URL? {
-        guard model.sessionID != nil else { return nil }
-        if let status = model.state?.status, !status.root.isEmpty, model.project != nil || !status.branch.isEmpty {
-            return URL(fileURLWithPath: status.root, isDirectory: true).standardizedFileURL
-        }
-        return model.project
+    private var workspaceDirectory: URL? {
+        model.sessionID.flatMap { model.openedSessions[$0]?.workspaceDirectory }
     }
 
     @ToolbarContentBuilder
@@ -337,18 +337,18 @@ private extension ConversationView {
         if let identifier = model.sessionID {
             ToolbarItem(placement: .navigation) { titleMenu(for: identifier) }
         }
-        if checkoutDirectory != nil {
+        if workspaceDirectory != nil {
             ToolbarSpacer(.flexible, placement: .automatic)
             ToolbarItem(placement: .automatic) {
-                Button(gitChangesAction, systemImage: "rectangle.split.2x1") {
-                    showsGitChanges.toggle()
+                Button(workspaceAction, systemImage: "rectangle.split.2x1") {
+                    showsWorkspace.toggle()
                 }
                 .labelStyle(.iconOnly)
-                .accessibilityLabel(gitChangesAction)
-                .help(gitChangesAction)
+                .accessibilityLabel(workspaceAction)
+                .help(workspaceAction)
             }
         }
     }
 
-    var gitChangesAction: String { showsGitChanges ? "Hide Git Changes" : "Show Git Changes" }
+    var workspaceAction: String { showsWorkspace ? "Hide Workspace" : "Show Workspace" }
 }

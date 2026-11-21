@@ -23,7 +23,7 @@ struct SplitDiffView: View {
                 }
             }
         }
-        .font(.system(.caption, design: .monospaced))
+        .font(.system(.callout, design: .monospaced))
         .textSelection(.enabled)
         .accessibilityIdentifier("SplitDiff")
     }
@@ -53,7 +53,7 @@ struct AddedFileLines: View {
                 .background(palette.diffAddedBackground)
             }
         }
-        .font(.system(.caption, design: .monospaced))
+        .font(.system(.callout, design: .monospaced))
         .textSelection(.enabled)
         .accessibilityIdentifier("AddedFileLines")
     }

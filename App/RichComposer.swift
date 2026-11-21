@@ -131,12 +131,7 @@ struct RichComposer: View {
             return true
         }
         guard let text = board.string(forType: .string), ComposerDraft.collapsesPaste(text) else { return false }
-        guard text.utf8.count <= AttachmentImporter.textLimit else {
-            model.reportDraftError(ComposerError.fileTooLarge, in: session)
-            return true
-        }
-        let lines = text.utf8.lazy.filter { $0 == 10 }.count + 1
-        model.attach([.init(name: "Pasted text (\(lines) lines)", body: .text(text))], in: session)
+        model.attachText(text, label: "Pasted text", in: session)
         return true
     }
 
@@ -330,15 +325,35 @@ struct AttachmentPreview: View {
             }
             switch attachment.body {
             case .text(let text):
-                ScrollView {
-                    Text(text).font(.system(.body, design: .monospaced)).textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                AttachmentTextPreview(text: text, path: attachment.name)
             case .image(let data):
                 if let image = NSImage(data: data) { Image(nsImage: image).resizable().scaledToFit() }
             }
         }
         .padding(20)
         .frame(minWidth: 480, idealWidth: 680, minHeight: 300, idealHeight: 500)
+    }
+}
+
+private struct AttachmentTextPreview: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let text: String
+    let path: String
+    @State private var highlighted: AttributedString?
+
+    var body: some View {
+        ScrollView {
+            (highlighted.map(Text.init) ?? Text(verbatim: text))
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task(id: colorScheme) {
+            let scheme = colorScheme
+            let result = await Task.detached(priority: .userInitiated) {
+                MarkdownPresentation.highlightedCode(text, path: path, colorScheme: scheme)
+            }.value
+            if !Task.isCancelled { highlighted = result }
+        }
     }
 }

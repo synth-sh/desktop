@@ -1,7 +1,7 @@
 import SwiftUI
 import UserNotifications
 
-enum SettingsPage: Hashable { case modelsAndMCP, themes, notifications }
+enum SettingsPage: Hashable { case modelsAndMCP, appearance, notifications }
 
 struct SettingsView: View {
     @Binding var theme: String
@@ -12,15 +12,22 @@ struct SettingsView: View {
             Tab("Models & MCP", systemImage: "slider.horizontal.3", value: .modelsAndMCP) {
                 EngineSettings(model: model)
             }
-            Tab("Themes", systemImage: "paintpalette", value: .themes) {
-                ThemePicker(selection: $theme)
+            Tab("Appearance", systemImage: "paintpalette", value: .appearance) {
+                AppearanceSettings(selection: $theme)
             }
             Tab("Notifications", systemImage: "bell", value: .notifications) {
                 NotificationSettings(notifications: model.notifications)
             }
         }
-        .frame(width: model.settingsPage == .modelsAndMCP ? 660 : 536,
-               height: model.settingsPage == .modelsAndMCP ? 465 : 340)
+        .frame(width: model.settingsPage == .modelsAndMCP ? 660 : 536, height: settingsHeight)
+    }
+
+    private var settingsHeight: CGFloat {
+        switch model.settingsPage {
+        case .modelsAndMCP: 465
+        case .appearance: 390
+        case .notifications: 340
+        }
     }
 }
 
@@ -86,8 +93,9 @@ private struct NotificationSettings: View {
     }
 }
 
-private struct ThemePicker: View {
+private struct AppearanceSettings: View {
     @Binding var selection: String
+    @AppStorage(WorkspaceTerminalPreference.useThemeBackground) private var useThemeBackground = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -117,6 +125,9 @@ private struct ThemePicker: View {
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
+            Divider()
+            Toggle("Match terminal background to app theme", isOn: $useThemeBackground)
+                .toggleStyle(.switch)
         }
         .padding(20)
         .frame(maxHeight: .infinity, alignment: .top)

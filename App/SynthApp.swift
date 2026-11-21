@@ -44,13 +44,22 @@ struct SynthApp: App {
 final class SynthAppDelegate: NSObject, NSApplicationDelegate {
     let model = ConversationModel()
     private var terminating = false
+    private var terminalFocusMonitor: Any?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        terminalFocusMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown],
+            handler: WorkspaceTerminalView.releaseFocusOnOutsideClick
+        )
         let notifications = model.notifications
         UNUserNotificationCenter.current().delegate = notifications
         notifications.openConversation = { [weak model] identifier, folder in
             Task { await model?.openFromNotification(identifier, folder: folder) }
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let terminalFocusMonitor { NSEvent.removeMonitor(terminalFocusMonitor) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

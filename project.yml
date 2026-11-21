@@ -10,6 +10,9 @@ packages:
   MarkdownEngine:
     url: https://github.com/synth-sh/swift-markdown-engine.git
     revision: "0c65a2fa6cc6e45fee04538c61dc26ca559683bf"
+  Ghostty:
+    url: https://github.com/Lakr233/libghostty-spm.git
+    exactVersion: "2.2.2026111701"
 
 targets:
   Synth:
@@ -23,6 +26,8 @@ targets:
         buildPhase: resources
       - path: Licenses/MarkdownEngine.txt
         buildPhase: resources
+      - path: Licenses/Ghostty.txt
+        buildPhase: resources
     dependencies:
       - package: SynthDesktop
         product: SynthClient
@@ -32,6 +37,8 @@ targets:
         product: MarkdownEngine
       - package: MarkdownEngine
         product: MarkdownEngineCodeBlocks
+      - package: Ghostty
+        product: GhosttyTerminal
     settings:
       base:
         ARCHS: arm64
@@ -43,7 +50,7 @@ targets:
         ALWAYS_SEARCH_USER_PATHS: "NO"
         ENABLE_APP_SANDBOX: "NO"
         GENERATE_INFOPLIST_FILE: "NO"
-        MARKETING_VERSION: "0.2.0"
+        MARKETING_VERSION: "0.2.1"
         CURRENT_PROJECT_VERSION: "1"
         PRODUCT_NAME: Synth
         PRODUCT_BUNDLE_IDENTIFIER: sh.getsynth.desktop

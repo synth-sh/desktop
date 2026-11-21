@@ -34,7 +34,12 @@ enum MarkdownPresentation {
     }
 
     static func highlightedLine(_ text: String, path: String, colorScheme: ColorScheme) -> AttributedString? {
-        guard !text.isEmpty, text.utf8.count <= 320 else { return nil }
+        guard text.utf8.count <= 320 else { return nil }
+        return highlightedCode(text, path: path, colorScheme: colorScheme)
+    }
+
+    static func highlightedCode(_ text: String, path: String, colorScheme: ColorScheme) -> AttributedString? {
+        guard !text.isEmpty else { return nil }
         let filename = path as NSString
         let language = filename.pathExtension.isEmpty ? filename.lastPathComponent : filename.pathExtension
         let bridge = colorScheme == .dark ? darkCode : lightCode
