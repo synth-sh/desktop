@@ -16,7 +16,7 @@ if [ -z "${SYNTH_ENGINE:-}" ]; then
     (
         cd "$desktop/engine"
         version=$(sed -n 's/^[[:space:]]*\.version = "\(.*\)",$/\1/p' build.zig.zon)
-        commit=$(git rev-parse --short=12 HEAD)
+        commit=$(git rev-parse --short=7 HEAD)
         "$zig" build -Doptimize=ReleaseSafe -Dtarget=aarch64-macos.26.0 \
             "-Dversion=${version:?Missing engine version}+${commit}" --prefix "$derived_data/engine"
     )
