@@ -7,6 +7,8 @@ import SynthProtocol
 @Observable
 final class ConversationModel {
     let notifications = ConversationNotifications()
+    let browserEnabled = UserDefaults.standard.object(forKey: BrowserPreference.enabled) as? Bool ?? true
+    var browserTabs: [String: BrowserTab] = [:]
     var settingsPage = SettingsPage.modelsAndMCP
     var engineSettingsPage = EngineSettingsPage.providers
     var customModelIDs = UserDefaults.standard.dictionary(forKey: "customModelIDs") as? [String: [String]] ?? [:] {
@@ -233,6 +235,7 @@ final class ConversationModel {
 
     func shutdown() async {
         isShuttingDown = true
+        closeBrowsers()
         observingAttention?.cancel()
         observing?.cancel()
         await client?.disconnect()
@@ -249,8 +252,7 @@ extension ConversationModel {
         guard !isShuttingDown else { throw SynthClient.Failure.disconnected }
         return SynthClient(
             executable: executable,
-            directory: FileManager.default.homeDirectoryForCurrentUser,
-            environment: environment
+            directory: URL.homeDirectory, environment: environment, browser: browserHandler
         )
     }
 

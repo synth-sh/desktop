@@ -5,6 +5,9 @@ struct WorkspacePane: View {
     let directory: URL?
     let openDirectories: Set<URL>
     let turnCompletion: UInt64?
+    let browser: BrowserTab?
+    let openBrowser: (() -> Void)?
+    let closeBrowser: () -> Void
     let addTerminalContext: (String) -> Void
     let hideWorkspace: () -> Void
     @State private var openedDirectories: [URL] = []
@@ -16,6 +19,8 @@ struct WorkspacePane: View {
                 let visible = root == directory
                 WorkspaceSplit(
                     directory: root, turnCompletion: visible ? turnCompletion : nil, isVisible: visible,
+                    browser: visible ? browser : nil, openBrowser: visible ? openBrowser : nil,
+                    closeBrowser: closeBrowser,
                     addTerminalContext: addTerminalContext, hideWorkspace: hideWorkspace
                 )
                 .opacity(visible ? 1 : 0)
@@ -38,6 +43,9 @@ private struct WorkspaceSplit: View {
     let directory: URL
     let turnCompletion: UInt64?
     let isVisible: Bool
+    let browser: BrowserTab?
+    let openBrowser: (() -> Void)?
+    let closeBrowser: () -> Void
     let addTerminalContext: (String) -> Void
     let hideWorkspace: () -> Void
     @AppStorage("workspaceBottomPaneHeight") private var bottomHeight = 0.0
@@ -53,7 +61,8 @@ private struct WorkspaceSplit: View {
         ) {
             WorkspaceTabPane(
                 directory: directory, turnCompletion: turnCompletion, isVisible: isVisible, tabs: topTabs,
-                addTerminalContext: addTerminalContext, toggleBottom: toggleBottom, showsBottom: showsBottom
+                addTerminalContext: addTerminalContext, browser: browser, openBrowser: openBrowser,
+                closeBrowser: closeBrowser, toggleBottom: toggleBottom, showsBottom: showsBottom
             )
         } pane: {
             WorkspaceTabPane(
@@ -72,7 +81,7 @@ private struct WorkspaceSplit: View {
         }
     }
 
-    private var hasNoTabs: Bool { topTabs.items.isEmpty && bottomTabs.items.isEmpty }
+    private var hasNoTabs: Bool { topTabs.items.isEmpty && bottomTabs.items.isEmpty && browser == nil }
 
     private func toggleBottom() {
         showsBottom.toggle()

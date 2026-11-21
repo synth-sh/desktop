@@ -1,7 +1,7 @@
 import SwiftUI
 import UserNotifications
 
-enum SettingsPage: Hashable { case modelsAndMCP, appearance, notifications }
+enum SettingsPage: Hashable { case modelsAndMCP, appearance, browser, notifications }
 
 struct SettingsView: View {
     @Binding var theme: String
@@ -15,6 +15,9 @@ struct SettingsView: View {
             Tab("Appearance", systemImage: "paintpalette", value: .appearance) {
                 AppearanceSettings(selection: $theme)
             }
+            Tab("Browser", systemImage: "globe", value: .browser) {
+                BrowserSettings()
+            }
             Tab("Notifications", systemImage: "bell", value: .notifications) {
                 NotificationSettings(notifications: model.notifications)
             }
@@ -26,8 +29,24 @@ struct SettingsView: View {
         switch model.settingsPage {
         case .modelsAndMCP: 465
         case .appearance: 390
+        case .browser: 180
         case .notifications: 340
         }
+    }
+}
+
+private struct BrowserSettings: View {
+    @AppStorage(BrowserPreference.enabled) private var enabled = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Enable the built-in browser", isOn: $enabled)
+            } footer: {
+                Text("Turning this off removes the Browser tab and its tools. Restart Synth to apply the change.")
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
