@@ -44,6 +44,9 @@ if [ -z "$identity" ]; then
     exit 1
 fi
 
+# Enable the production updater only in packaged releases, not local builds.
+plutil -replace SUFeedURL -string 'https://pkgs.getsynth.sh/desktop/appcast.xml' "$app/Contents/Info.plist"
+
 sign_code() {
     codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" "$@"
 }

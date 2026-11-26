@@ -72,7 +72,6 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.developer-tools
-        SUFeedURL: "https://pkgs.getsynth.sh/desktop/appcast.xml"
         SUPublicEDKey: "n0wEZZTL3aL0nb0q2cTnYObTKWSP4HuycogEzYY8Kl4="
         SUEnableAutomaticChecks: true
     postBuildScripts:

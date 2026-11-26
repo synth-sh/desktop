@@ -18,9 +18,11 @@ Then push a matching stable tag for that commit, such as `v0.1.0` for
 marketing version `0.1.0`.
 
 **Release Desktop** downloads that tested app without rebuilding, checks its
-version against the tag, signs Sparkle and the engine helper before signing
-and notarizing the app, then signs the final ZIP with Sparkle and attaches it
-to the GitHub release. If the tag was pushed too early, rerun the release once
+version against the tag, and adds `SUFeedURL` before signing and notarizing
+it. Local builds don't have a feed URL, so Sparkle doesn't start. The workflow
+signs the final ZIP with Sparkle and attaches it to the GitHub release.
+
+If the tag was pushed too early, rerun the release once
 the `main` run succeeds. The artifact is retained for 30 days. If it's missing
 or expired, rerun **Build and Test** for the tagged commit if GitHub still
 allows it, then rerun the release. Otherwise, cut the release from a new `main`
