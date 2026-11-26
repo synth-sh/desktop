@@ -13,6 +13,9 @@ packages:
   Ghostty:
     url: https://github.com/Lakr233/libghostty-spm.git
     exactVersion: "2.2.2026111701"
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle.git
+    exactVersion: "2.10.1"
 
 targets:
   Synth:
@@ -39,6 +42,8 @@ targets:
         product: MarkdownEngineCodeBlocks
       - package: Ghostty
         product: GhosttyTerminal
+      - package: Sparkle
+        product: Sparkle
     settings:
       base:
         ARCHS: arm64
@@ -67,6 +72,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.developer-tools
+        SUPublicEDKey: "n0wEZZTL3aL0nb0q2cTnYObTKWSP4HuycogEzYY8Kl4="
+        SUEnableAutomaticChecks: true
     postBuildScripts:
       - name: Embed Synth engine
         inputFiles:

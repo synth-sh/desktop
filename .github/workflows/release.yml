@@ -71,6 +71,30 @@ jobs:
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
         run: Scripts/package-release.sh "$RUNNER_TEMP/Synth.app" "synth-desktop-${GITHUB_REF_NAME#v}-macos-arm64.zip"
 
+      - name: Download and verify Sparkle signing tools
+        run: |
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          cd "$RUNNER_TEMP/sparkle"
+          curl --fail --silent --show-error --location --retry 3 --output sparkle.zip \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.10.1/Sparkle-for-Swift-Package-Manager.zip
+          echo '4c2e48a3e50ebcc2c88a58a4c7264a1a99c3c31857ce754357afb9cdb323022a  sparkle.zip' | shasum -a 256 --check
+          ditto -x -k sparkle.zip .
+
+      - name: Sign final ZIP for Sparkle
+        shell: bash
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          : "${SPARKLE_ED_PRIVATE_KEY:?Set the SPARKLE_ED_PRIVATE_KEY Actions secret}"
+          archive="synth-desktop-${GITHUB_REF_NAME#v}-macos-arm64.zip"
+          # sign_update can echo malformed key input; don't log its failure output.
+          if ! attributes=$(printf '%s\n' "$SPARKLE_ED_PRIVATE_KEY" |
+            "$RUNNER_TEMP/sparkle/bin/sign_update" --ed-key-file - "$archive" 2>/dev/null); then
+            echo '::error::Sparkle signing failed. Check the exported key and release ZIP.'
+            exit 1
+          fi
+          printf '### Sparkle appcast enclosure\n\n`%s`: `%s`\n' "$archive" "$attributes" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish stable release
         env:
           GH_TOKEN: ${{ github.token }}

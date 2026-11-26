@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 import UserNotifications
 
@@ -22,6 +23,11 @@ struct SynthApp: App {
         .commands {
             CommandGroup(replacing: .appInfo) {
                 Button("About Synth") { AboutPanel.show() }
+                if let updater = delegate.updaterController?.updater {
+                    CheckForUpdatesButton(updater: updater)
+                } else {
+                    Button("Check for Updates…") {}.disabled(true)
+                }
             }
             CommandGroup(replacing: .newItem) {
                 Button("New Conversation", systemImage: "square.and.pencil") {
@@ -43,9 +49,28 @@ struct SynthApp: App {
     }
 }
 
+private struct CheckForUpdatesButton: View {
+    let updater: SPUUpdater
+    @State private var canCheckForUpdates = false
+
+    var body: some View {
+        Button("Check for Updates…", action: updater.checkForUpdates)
+            .disabled(!canCheckForUpdates)
+            .onReceive(updater.publisher(for: \.canCheckForUpdates, options: [.initial, .new])) {
+                canCheckForUpdates = $0
+            }
+    }
+}
+
 @MainActor
 final class SynthAppDelegate: NSObject, NSApplicationDelegate {
     let model = ConversationModel()
+    let updaterController: SPUStandardUpdaterController? = {
+        // Builds without update configuration should not start Sparkle.
+        guard Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil,
+              Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") != nil else { return nil }
+        return SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    }()
     private var terminating = false
     private var terminalFocusMonitor: Any?
 
