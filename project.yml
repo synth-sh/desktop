@@ -56,8 +56,8 @@ targets:
         ALWAYS_SEARCH_USER_PATHS: "NO"
         ENABLE_APP_SANDBOX: "NO"
         GENERATE_INFOPLIST_FILE: "NO"
-        MARKETING_VERSION: "0.2.3"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.2.4"
+        CURRENT_PROJECT_VERSION: "2"
         PRODUCT_NAME: Synth
         PRODUCT_BUNDLE_IDENTIFIER: sh.getsynth.desktop
         SYNTH_ENGINE: $(SRCROOT)/DerivedData/engine/bin/synth
