@@ -44,9 +44,19 @@ if [ -z "$identity" ]; then
     exit 1
 fi
 
-codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" \
-    "$app/Contents/Helpers/synth"
-codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" "$app"
+sign_code() {
+    codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" "$@"
+}
+
+sparkle="$app/Contents/Frameworks/Sparkle.framework"
+sparkle_version="$sparkle/Versions/Current"
+# Re-sign inside out and retain the bundled services' entitlements.
+for component in "$sparkle_version/Autoupdate" "$sparkle_version/Updater.app" \
+    "$sparkle_version/XPCServices/Downloader.xpc" "$sparkle_version/XPCServices/Installer.xpc" "$sparkle"; do
+    sign_code --preserve-metadata=entitlements "$component"
+done
+sign_code "$app/Contents/Helpers/synth"
+sign_code "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 
 printf '%s' "$NOTARY_API_KEY" > "$signing_dir/notary.p8"
